@@ -1,5 +1,137 @@
 # Implementation Report
 
+## Latest Update: Phase 6 PhoWhisper And Phase 7 Final Evaluation
+
+### Task Summary
+
+Implemented full PhoWhisper-base fine-tuning for three-region dialect
+classification and generated final model comparison plus error analysis.
+
+### Files Changed
+
+| File or output | Purpose |
+| --- | --- |
+| `src/training/train_phowhisper.py` | Full PhoWhisper-base fine-tuning script with device selection, early stopping, metrics, predictions, latency, and report outputs. |
+| `src/evaluation/final_evaluation.py` | Final comparison and sample-level error analysis script. |
+| `tests/test_phowhisper.py`, `tests/test_final_evaluation.py` | Unit tests for device/split behavior and final evaluation output contracts. |
+| `requirements.txt`, `pyproject.toml` | Added `transformers>=4.41,<5`. |
+| `README.md`, `READING_GUIDE.md` | Added Phase 6/7 commands, results, and reading path. |
+| `outputs/metrics/phowhisper_*`, `outputs/reports/phase6_phowhisper_report.md` | Phase 6 metrics, training log, confusion matrices, predictions, and report. |
+| `outputs/metrics/final_comparison.csv`, `outputs/metrics/final_sample_errors.csv`, `outputs/reports/error_analysis.md` | Phase 7 final comparison and error analysis artifacts. |
+
+### Implementation Scope
+
+Included:
+
+- Full fine-tuning using `WhisperForAudioClassification` from
+  `vinai/PhoWhisper-base`.
+- All classification model parameters trainable; no frozen encoder path.
+- `auto -> mps -> cuda -> cpu` device resolution with clear explicit-device
+  errors.
+- Best checkpoint by validation macro F1.
+- Published model size estimates and local checkpoint size.
+- MPS/CUDA synchronized latency estimate.
+- Final comparison across Logistic Regression, SVM, CNN, and PhoWhisper.
+- Sample-level error analysis for the best validation model.
+
+Not included:
+
+- No province-level classification, speaker/hometown prediction, ASR generation,
+  PhoWhisper alternatives, ONNX, inference API, or web app.
+- Model checkpoint and Hugging Face cache remain under ignored `outputs/models/`.
+
+### Research Notes
+
+- `vinai/PhoWhisper-base` is the PhoWhisper base model with an estimated 74M
+  parameters.
+- Hugging Face lists the model repository around 294 MB and PyTorch weights
+  around 290 MB.
+- The config is Whisper-base-like: 80 Mel bins, `d_model=512`, 6 encoder layers,
+  and 6 decoder layers.
+
+Sources checked:
+
+- https://github.com/VinAIResearch/PhoWhisper
+- https://huggingface.co/vinai/PhoWhisper-base/tree/main
+- https://huggingface.co/vinai/PhoWhisper-base/blob/main/config.json
+- https://arxiv.org/abs/2406.02555
+
+### Commands Run
+
+```bash
+sed -n '1,260p' PLAN.md
+git status --short
+rg --files src tests outputs/metrics outputs/reports data/processed | sort
+cat requirements.txt
+cat pyproject.toml
+sed -n '1,760p' src/training/train_cnn.py
+sed -n '1,260p' src/training/train_baseline.py
+head -n 5 data/processed/preprocessed_metadata.csv
+cat outputs/metrics/baseline_results.json
+cat outputs/metrics/cnn_results.json
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m compileall -q src tests
+env UV_CACHE_DIR=/tmp/vimd-uv-cache uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -c "import transformers; print(transformers.__version__); from transformers import AutoFeatureExtractor, WhisperForAudioClassification; print('ok')"
+.venv/bin/python -c "import torch; print(torch.__version__); print('mps', hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()); print('cuda', torch.cuda.is_available())"
+.venv/bin/python -m src.training.train_phowhisper --overwrite --device auto
+.venv/bin/python -m src.evaluation.final_evaluation --overwrite
+cat outputs/metrics/phowhisper_results.json
+cat outputs/metrics/final_comparison.csv
+head -n 8 outputs/metrics/phowhisper_training_log.csv
+sed -n '1,220p' outputs/reports/phase6_phowhisper_report.md
+sed -n '1,220p' outputs/reports/error_analysis.md
+head -n 8 outputs/metrics/final_sample_errors.csv
+ls -lh outputs/models/phowhisper_dialect.pt outputs/models/hf_cache
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Dependency install | Passed after network approval for `transformers`. |
+| Unit tests | Passed: 21 tests. |
+| Python compilation | Passed for `src` and `tests`. |
+| PhoWhisper training | Passed: used `mps`, early stopped at epoch 6, best epoch 3. |
+| Phase 7 final evaluation | Passed: selected SVM by validation macro F1. |
+
+PhoWhisper metrics:
+
+| Split | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| Train | 0.9933 | 0.9933 |
+| Validation | 0.6667 | 0.6623 |
+| Test | 0.7111 | 0.7113 |
+
+Final comparison:
+
+| Model | Valid Macro F1 | Test Macro F1 |
+| --- | ---: | ---: |
+| Logistic Regression | 0.5981 | 0.6292 |
+| SVM | 0.6918 | 0.6264 |
+| Lightweight CNN | 0.4339 | 0.6668 |
+| PhoWhisper-base | 0.6623 | 0.7113 |
+
+### Known Limitations
+
+- PhoWhisper-base test macro F1 is highest, but final best model is selected by
+  validation macro F1, so SVM remains best.
+- Validation/test sets have only 45 files each; metrics are noisy.
+- PhoWhisper overfits the 300-file train split quickly.
+- Local checkpoint is `WhisperForAudioClassification` state for classification,
+  not the full original ASR checkpoint with decoder generation usage.
+- SVM confidence in final errors is a decision margin, not calibrated
+  probability.
+
+### Reviewer Priorities
+
+1. Decide whether model selection should stay validation macro F1 or prefer
+   PhoWhisper due to higher test macro F1.
+2. Inspect `outputs/metrics/final_sample_errors.csv` before Phase 8 inference.
+3. Keep Phase 8 scoped to regional dialect prediction only.
+
+---
+
 ## Latest Update: Phase 5 Lightweight CNN
 
 ### Task Summary

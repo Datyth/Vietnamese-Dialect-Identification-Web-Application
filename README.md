@@ -198,3 +198,65 @@ Current CNN results from the local run:
 The current environment selected `cpu` because PyTorch reported both MPS and
 CUDA as unavailable. The script will still use MPS or CUDA automatically when
 the installed PyTorch build exposes those devices.
+
+## Phase 6: PhoWhisper-base Fine-Tuning
+
+Phase 6 fine-tunes one pretrained speech model, `vinai/PhoWhisper-base`, for the
+same three project labels. PhoWhisper-base is a Whisper-base-style model with an
+estimated 74M parameters and about 290 MB of published PyTorch weights. The
+training script uses `WhisperForAudioClassification`, so it fine-tunes the
+encoder/classification stack for dialect classification and does not run ASR
+generation.
+
+Run:
+
+```bash
+.venv/bin/python -m src.training.train_phowhisper --overwrite --device auto
+```
+
+Generated outputs:
+
+- `outputs/metrics/phowhisper_results.json`
+- `outputs/metrics/phowhisper_training_log.csv`
+- `outputs/metrics/phowhisper_valid_confusion_matrix.csv`
+- `outputs/metrics/phowhisper_test_confusion_matrix.csv`
+- `outputs/metrics/phowhisper_test_predictions.csv`
+- `outputs/models/phowhisper_dialect.pt`
+- `outputs/reports/phase6_phowhisper_report.md`
+
+Current local run:
+
+| Split | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| Train | 0.9933 | 0.9933 |
+| Validation | 0.6667 | 0.6623 |
+| Test | 0.7111 | 0.7113 |
+
+Training used `mps`, early-stopped after 6 epochs, and selected epoch 3 by
+validation macro F1. The local checkpoint is ignored by Git.
+
+## Phase 7: Final Evaluation And Error Analysis
+
+Phase 7 compares all available models and analyzes errors for the best model by
+validation macro F1.
+
+Run:
+
+```bash
+.venv/bin/python -m src.evaluation.final_evaluation --overwrite
+```
+
+Generated outputs:
+
+- `outputs/metrics/final_comparison.csv`
+- `outputs/metrics/final_sample_errors.csv`
+- `outputs/reports/error_analysis.md`
+
+Current best model by validation macro F1 is still the Phase 4 SVM baseline:
+
+| Model | Validation Macro F1 | Test Macro F1 |
+| --- | ---: | ---: |
+| Logistic Regression | 0.5981 | 0.6292 |
+| SVM | 0.6918 | 0.6264 |
+| Lightweight CNN | 0.4339 | 0.6668 |
+| PhoWhisper-base | 0.6623 | 0.7113 |

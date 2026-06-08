@@ -1,0 +1,83 @@
+{
+  "phase": "phase6_phowhisper_base",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "model_id": "vinai/PhoWhisper-base",
+  "published_parameter_count": 74000000,
+  "published_repository_size_mb": 294,
+  "published_weights_size_mb": 290,
+  "model_size_mb": 79.08289909362793,
+  "device": "mps",
+  "requested_device": "auto",
+  "seed": 42,
+  "feature": {
+    "name": "PhoWhisper/Whisper input_features",
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "input_shape": [
+      80,
+      3000
+    ]
+  },
+  "training": {
+    "mode": "full_fine_tune",
+    "batch_size": 2,
+    "max_epochs": 8,
+    "epochs_completed": 6,
+    "patience": 3,
+    "learning_rate": 1e-05,
+    "weight_decay": 0.01,
+    "training_log_path": "outputs/metrics/phowhisper_training_log.csv"
+  },
+  "split_counts": {
+    "train": 300,
+    "valid": 45,
+    "test": 45
+  },
+  "best_epoch": 3,
+  "best_valid_macro_f1": 0.6622710622710622,
+  "checkpoint_path": "outputs/models/phowhisper_dialect.pt",
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_seconds_per_sample": 0.06800034980406053
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.025101934925963482,
+      "accuracy": 0.9933333333333333,
+      "macro_f1": 0.9933326665999934,
+      "per_class_f1": {
+        "Northern": 0.9900990099009901,
+        "Central": 1.0,
+        "Southern": 0.98989898989899
+      }
+    },
+    "valid": {
+      "loss": 1.0026975149909656,
+      "accuracy": 0.6666666666666666,
+      "macro_f1": 0.6622710622710622,
+      "per_class_f1": {
+        "Northern": 0.8,
+        "Central": 0.5714285714285714,
+        "Southern": 0.6153846153846154
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.7730813393576278,
+      "accuracy": 0.7111111111111111,
+      "macro_f1": 0.7113460183227626,
+      "per_class_f1": {
+        "Northern": 0.8,
+        "Central": 0.6363636363636364,
+        "Southern": 0.6976744186046512
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_test_confusion_matrix.csv",
+      "predictions_path": "outputs/metrics/phowhisper_test_predictions.csv"
+    }
+  }
+}

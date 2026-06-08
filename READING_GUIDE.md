@@ -19,8 +19,9 @@ chỉ gom về 3 nhãn lớn ở trên. Project không dự đoán quê thật, 
 nói, hay tỉnh/thành cụ thể.
 
 Tên repo có "Web Application", nhưng trạng thái code hiện tại mới đi tới dữ
-liệu, tiền xử lý audio, EDA tối thiểu, baseline MFCC và lightweight CNN.
-Inference pipeline và web app vẫn là phase sau trong `PLAN.md`.
+liệu, tiền xử lý audio, EDA tối thiểu, baseline MFCC, lightweight CNN,
+PhoWhisper-base experiment và final evaluation/error analysis. Inference
+pipeline và web app vẫn là phase sau trong `PLAN.md`.
 
 ## 2. Trạng Thái Hiện Tại
 
@@ -33,7 +34,9 @@ Theo `PLAN.md`, repo đã có các phần chính sau:
 | Phase 3: Data EDA | Đã có báo cáo kiểm tra tối thiểu. |
 | Phase 4: MFCC baselines | Đã train Logistic Regression và SVM. |
 | Phase 5: Lightweight CNN | Đã có log-Mel feature, CNN nhỏ và script train PyTorch. |
-| Phase 6+ | Chưa có PhoWhisper, inference hoặc web app. |
+| Phase 6: PhoWhisper-base | Đã fine-tune PhoWhisper-base cho 3-class classification. |
+| Phase 7: Final evaluation | Đã tổng hợp metrics và error analysis. |
+| Phase 8+ | Chưa có inference hoặc web app. |
 
 Subset hiện tại có 390 file audio đã tải:
 
@@ -55,6 +58,8 @@ ViMD Parquet shards
   -> data/processed/preprocessed_metadata.csv
   -> MFCC mean/std features -> Logistic Regression + SVM
   -> log-Mel spectrograms -> lightweight CNN
+  -> PhoWhisper input_features -> PhoWhisper-base classifier
+  -> final comparison + error analysis
   -> outputs/metrics/, outputs/models/, outputs/reports/
 ```
 
@@ -68,7 +73,9 @@ Nói ngắn gọn:
 4. `logmel.py` biến waveform thành log-Mel spectrogram cho CNN.
 5. `train_baseline.py` train Logistic Regression và SVM.
 6. `train_cnn.py` train lightweight CNN bằng PyTorch.
-7. Các kết quả được ghi vào `outputs/` và tóm tắt trong `reports/`.
+7. `train_phowhisper.py` fine-tune PhoWhisper-base bằng Transformers.
+8. `final_evaluation.py` tổng hợp metrics và sinh error analysis.
+9. Các kết quả được ghi vào `outputs/` và tóm tắt trong `reports/`.
 
 ## 4. Nên Đọc File Nào Trước?
 
@@ -262,7 +269,43 @@ Run hiện tại chọn `cpu` vì PyTorch trong môi trường này báo `mps=Fa
 `cuda=False`. Nếu cài PyTorch build có MPS hoặc CUDA, `--device auto` sẽ ưu tiên
 `mps`, rồi `cuda`, rồi `cpu`.
 
-### Bước 8: Đọc tests
+### Bước 8: Đọc Phase 6 PhoWhisper-base
+
+Các file chính:
+
+- `src/training/train_phowhisper.py`
+- `outputs/metrics/phowhisper_results.json`
+- `outputs/reports/phase6_phowhisper_report.md`
+
+PhoWhisper-base là model pretrained lớn hơn CNN nhiều: khoảng 74M parameters và
+published PyTorch weights khoảng 290 MB. Script dùng
+`WhisperForAudioClassification` để fine-tune cho 3 nhãn dialect, không dùng ASR
+generation.
+
+Run hiện tại:
+
+| Split | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| train | 0.9933 | 0.9933 |
+| valid | 0.6667 | 0.6623 |
+| test | 0.7111 | 0.7113 |
+
+Script chọn device theo thứ tự `mps`, `cuda`, rồi `cpu` khi dùng `--device auto`.
+Run hiện tại dùng `mps`, early-stopped ở epoch 6 và chọn best epoch 3.
+
+### Bước 9: Đọc Phase 7 final evaluation
+
+File chính:
+
+- `src/evaluation/final_evaluation.py`
+- `outputs/metrics/final_comparison.csv`
+- `outputs/metrics/final_sample_errors.csv`
+- `outputs/reports/error_analysis.md`
+
+Phase 7 chọn best model theo validation macro F1. Hiện tại best model vẫn là
+Phase 4 SVM, dù PhoWhisper-base có test macro F1 cao nhất.
+
+### Bước 10: Đọc tests
 
 Tests nằm trong `tests/`:
 
@@ -273,6 +316,8 @@ Tests nằm trong `tests/`:
 | `tests/test_mfcc.py` | Shape MFCC và giá trị hữu hạn. |
 | `tests/test_logmel.py` | Shape log-Mel và giá trị hữu hạn. |
 | `tests/test_cnn.py` | Forward pass CNN và device resolver. |
+| `tests/test_phowhisper.py` | Device resolver và split metadata cho PhoWhisper. |
+| `tests/test_final_evaluation.py` | Tổng hợp final metrics và error output fields. |
 
 Đây là nơi tốt để người mới hiểu kỳ vọng hành vi của từng module mà không phải
 đọc toàn bộ script một lần.
@@ -331,6 +376,18 @@ Chọn device rõ ràng nếu cần:
 .venv/bin/python -m src.training.train_cnn --overwrite --device cpu
 ```
 
+Fine-tune PhoWhisper-base:
+
+```bash
+.venv/bin/python -m src.training.train_phowhisper --overwrite --device auto
+```
+
+Tạo final comparison và error analysis:
+
+```bash
+.venv/bin/python -m src.evaluation.final_evaluation --overwrite
+```
+
 ## 6. Quy Tắc Nhỏ Khi Đọc Và Sửa Code
 
 - Project chỉ support 3 class: `Northern`, `Central`, `Southern`.
@@ -344,7 +401,6 @@ Chọn device rõ ràng nếu cần:
 
 Đừng mất thời gian tìm các phần này trong code hiện tại:
 
-- Chưa có PhoWhisper experiment.
 - Chưa có `src/inference/predict.py`.
 - Chưa có Streamlit app hoặc web UI.
 - Chưa có ONNX export.
@@ -366,8 +422,12 @@ Nếu bạn chỉ có ít thời gian, hãy đọc theo checklist này:
 7. Đọc `src/features/logmel.py` và `src/models/cnn.py`.
 8. Đọc `src/training/train_cnn.py`, tập trung vào `resolve_device`,
    `extract_logmel_features`, `train_one_epoch`, `evaluate_model` và `main`.
-9. Mở `outputs/metrics/baseline_results.json` và `outputs/metrics/cnn_results.json`
-   để xem metric cuối cùng.
+9. Đọc `src/training/train_phowhisper.py`, tập trung vào `resolve_device`,
+   `extract_input_features`, `train_one_epoch`, `evaluate_model` và `main`.
+10. Đọc `src/evaluation/final_evaluation.py`.
+11. Mở `outputs/metrics/baseline_results.json`, `outputs/metrics/cnn_results.json`,
+   `outputs/metrics/phowhisper_results.json` và
+   `outputs/metrics/final_comparison.csv` để xem metric cuối cùng.
 
 Sau checklist này, bạn sẽ nắm được luồng chính của project từ dữ liệu đến model
-baseline và CNN.
+baseline, CNN, PhoWhisper và final evaluation.

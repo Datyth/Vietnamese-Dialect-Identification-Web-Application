@@ -1,0 +1,5 @@
+model,phase,valid_accuracy,valid_macro_f1,test_accuracy,test_macro_f1,model_size_mb,latency_seconds_per_sample,metrics_path
+logistic_regression,phase4_mfcc_baseline,0.600000,0.598095,0.622222,0.629181,0.0022,,outputs/metrics/baseline_results.json
+svm,phase4_mfcc_baseline,0.688889,0.691845,0.622222,0.626449,0.0458,,outputs/metrics/baseline_results.json
+lightweight_cnn,phase5_lightweight_cnn,0.422222,0.433948,0.666667,0.666843,0.0994,,outputs/metrics/cnn_results.json
+phowhisper_base,phase6_phowhisper_base,0.666667,0.662271,0.711111,0.711346,79.0829,0.068000,outputs/metrics/phowhisper_results.json

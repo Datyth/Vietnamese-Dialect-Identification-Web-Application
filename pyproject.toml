@@ -1,0 +1,13 @@
+[project]
+name = "vietnamese-dialect-identification-web-application"
+version = "0.1.0"
+description = "Lightweight three-region Vietnamese dialect identification"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "duckdb>=1.4,<2",
+    "numpy>=1.26,<3",
+    "scikit-learn>=1.4,<2",
+    "soundfile>=0.13,<1",
+    "soxr>=0.5,<1",
+]

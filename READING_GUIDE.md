@@ -18,9 +18,9 @@ Dataset chính là ViMD. Dataset gốc có thông tin vùng/province, nhưng pro
 chỉ gom về 3 nhãn lớn ở trên. Project không dự đoán quê thật, danh tính người
 nói, hay tỉnh/thành cụ thể.
 
-Tên repo có "Web Application", nhưng trạng thái code hiện tại mới đi tới các
-bước dữ liệu, tiền xử lý audio, EDA tối thiểu và baseline MFCC. CNN, inference
-pipeline và web app vẫn là phase sau trong `PLAN.md`.
+Tên repo có "Web Application", nhưng trạng thái code hiện tại mới đi tới dữ
+liệu, tiền xử lý audio, EDA tối thiểu, baseline MFCC và lightweight CNN.
+Inference pipeline và web app vẫn là phase sau trong `PLAN.md`.
 
 ## 2. Trạng Thái Hiện Tại
 
@@ -32,7 +32,8 @@ Theo `PLAN.md`, repo đã có các phần chính sau:
 | Phase 2: Audio preprocessing | Đã chuẩn hoá audio về mono 16 kHz, 16 giây. |
 | Phase 3: Data EDA | Đã có báo cáo kiểm tra tối thiểu. |
 | Phase 4: MFCC baselines | Đã train Logistic Regression và SVM. |
-| Phase 5+ | Chưa có CNN, PhoWhisper, inference hoặc web app. |
+| Phase 5: Lightweight CNN | Đã có log-Mel feature, CNN nhỏ và script train PyTorch. |
+| Phase 6+ | Chưa có PhoWhisper, inference hoặc web app. |
 
 Subset hiện tại có 390 file audio đã tải:
 
@@ -52,8 +53,8 @@ ViMD Parquet shards
   -> data/processed/audio_16k/
   -> data/processed/audio_preprocessed_16s/
   -> data/processed/preprocessed_metadata.csv
-  -> MFCC mean/std features
-  -> Logistic Regression + SVM
+  -> MFCC mean/std features -> Logistic Regression + SVM
+  -> log-Mel spectrograms -> lightweight CNN
   -> outputs/metrics/, outputs/models/, outputs/reports/
 ```
 
@@ -62,9 +63,12 @@ Nói ngắn gọn:
 1. `prepare_metadata.py` đọc metadata từ ViMD, map nhãn về 3 vùng, chọn subset
    audio nhỏ và cân bằng.
 2. `preprocess_audio.py` chuẩn hoá từng file audio để mọi file có cùng format.
-3. `mfcc.py` biến waveform thành vector đặc trưng MFCC.
-4. `train_baseline.py` train model truyền thống bằng các vector MFCC.
-5. Các kết quả được ghi vào `outputs/` và tóm tắt trong `reports/`.
+3. `mfcc.py` biến waveform thành vector đặc trưng MFCC cho baseline truyền
+   thống.
+4. `logmel.py` biến waveform thành log-Mel spectrogram cho CNN.
+5. `train_baseline.py` train Logistic Regression và SVM.
+6. `train_cnn.py` train lightweight CNN bằng PyTorch.
+7. Các kết quả được ghi vào `outputs/` và tóm tắt trong `reports/`.
 
 ## 4. Nên Đọc File Nào Trước?
 
@@ -218,7 +222,47 @@ Kết quả hiện tại:
 
 Theo validation macro F1, baseline tốt nhất hiện tại là `svm`.
 
-### Bước 7: Đọc tests
+### Bước 7: Đọc Phase 5 CNN
+
+Các file chính:
+
+- `src/features/logmel.py`
+- `src/models/cnn.py`
+- `src/training/train_cnn.py`
+
+`logmel.py` tạo spectrogram dạng `[n_mels, frames]`, mặc định là 64 Mel bins.
+Khi đưa vào CNN, script train thêm channel dimension để tensor có dạng:
+
+```text
+[batch, 1, n_mels, frames]
+```
+
+`src/models/cnn.py` định nghĩa `LightweightCNN`: 3 convolution blocks nhỏ,
+adaptive average pooling, dropout và linear classifier cho 3 nhãn.
+
+`train_cnn.py` làm các việc chính:
+
+1. Đọc `data/processed/preprocessed_metadata.csv`.
+2. Load audio đã preprocess và kiểm tra đúng 16 kHz, 256,000 samples.
+3. Trích log-Mel spectrogram.
+4. Chọn device: `mps`, `cuda` hoặc `cpu`.
+5. Train CNN với early stopping theo validation macro F1.
+6. Lưu checkpoint, metrics, confusion matrix, training log và report.
+
+Checkpoint được ghi vào `outputs/models/lightweight_cnn_logmel.pt` nhưng thư mục
+`outputs/models/` đang được ignore để tránh commit model artifact.
+
+Kết quả Phase 5 nằm ở:
+
+- `outputs/metrics/cnn_results.json`
+- `outputs/metrics/cnn_training_log.csv`
+- `outputs/reports/phase5_cnn_report.md`
+
+Run hiện tại chọn `cpu` vì PyTorch trong môi trường này báo `mps=False` và
+`cuda=False`. Nếu cài PyTorch build có MPS hoặc CUDA, `--device auto` sẽ ưu tiên
+`mps`, rồi `cuda`, rồi `cpu`.
+
+### Bước 8: Đọc tests
 
 Tests nằm trong `tests/`:
 
@@ -227,6 +271,8 @@ Tests nằm trong `tests/`:
 | `tests/test_prepare_metadata.py` | Mapping label, chọn shard, ưu tiên speaker khác nhau. |
 | `tests/test_audio_preprocessing.py` | Shape audio, trim silence, pad/crop, stereo input. |
 | `tests/test_mfcc.py` | Shape MFCC và giá trị hữu hạn. |
+| `tests/test_logmel.py` | Shape log-Mel và giá trị hữu hạn. |
+| `tests/test_cnn.py` | Forward pass CNN và device resolver. |
 
 Đây là nơi tốt để người mới hiểu kỳ vọng hành vi của từng module mà không phải
 đọc toàn bộ script một lần.
@@ -271,6 +317,20 @@ Train lại baseline MFCC:
 .venv/bin/python -m src.training.train_baseline --overwrite
 ```
 
+Train lightweight CNN:
+
+```bash
+.venv/bin/python -m src.training.train_cnn --overwrite
+```
+
+Chọn device rõ ràng nếu cần:
+
+```bash
+.venv/bin/python -m src.training.train_cnn --overwrite --device mps
+.venv/bin/python -m src.training.train_cnn --overwrite --device cuda
+.venv/bin/python -m src.training.train_cnn --overwrite --device cpu
+```
+
 ## 6. Quy Tắc Nhỏ Khi Đọc Và Sửa Code
 
 - Project chỉ support 3 class: `Northern`, `Central`, `Southern`.
@@ -284,7 +344,6 @@ Train lại baseline MFCC:
 
 Đừng mất thời gian tìm các phần này trong code hiện tại:
 
-- Chưa có lightweight CNN.
 - Chưa có PhoWhisper experiment.
 - Chưa có `src/inference/predict.py`.
 - Chưa có Streamlit app hoặc web UI.
@@ -304,7 +363,11 @@ Nếu bạn chỉ có ít thời gian, hãy đọc theo checklist này:
 5. Đọc `src/features/mfcc.py`, tập trung vào `mfcc_mean_std`.
 6. Đọc `src/training/train_baseline.py`, tập trung vào `extract_features`,
    `build_models`, `evaluate` và `main`.
-7. Mở `outputs/metrics/baseline_results.json` để xem metric cuối cùng.
+7. Đọc `src/features/logmel.py` và `src/models/cnn.py`.
+8. Đọc `src/training/train_cnn.py`, tập trung vào `resolve_device`,
+   `extract_logmel_features`, `train_one_epoch`, `evaluate_model` và `main`.
+9. Mở `outputs/metrics/baseline_results.json` và `outputs/metrics/cnn_results.json`
+   để xem metric cuối cùng.
 
 Sau checklist này, bạn sẽ nắm được luồng chính của project từ dữ liệu đến model
-baseline.
+baseline và CNN.

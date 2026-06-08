@@ -1,0 +1,81 @@
+{
+  "phase": "phase5_lightweight_cnn",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "cpu",
+  "requested_device": "auto",
+  "seed": 42,
+  "feature": {
+    "name": "log_mel_spectrogram",
+    "n_mels": 64,
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "input_shape": [
+      1,
+      64,
+      1599
+    ],
+    "standardized_per_sample": true
+  },
+  "model": {
+    "name": "LightweightCNN",
+    "num_classes": 3,
+    "dropout": 0.25
+  },
+  "training": {
+    "batch_size": 16,
+    "max_epochs": 40,
+    "epochs_completed": 21,
+    "patience": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "training_log_path": "outputs/metrics/cnn_training_log.csv"
+  },
+  "split_counts": {
+    "train": 300,
+    "valid": 45,
+    "test": 45
+  },
+  "best_epoch": 13,
+  "best_valid_macro_f1": 0.43394777265745005,
+  "checkpoint_path": "outputs/models/lightweight_cnn_logmel.pt",
+  "metrics": {
+    "train": {
+      "loss": 0.5365994803110758,
+      "accuracy": 0.79,
+      "macro_f1": 0.784577465763857,
+      "per_class_f1": {
+        "Northern": 0.7368421052631579,
+        "Central": 0.9428571428571428,
+        "Southern": 0.6740331491712708
+      }
+    },
+    "valid": {
+      "loss": 0.9610437923007541,
+      "accuracy": 0.4222222222222222,
+      "macro_f1": 0.43394777265745005,
+      "per_class_f1": {
+        "Northern": 0.1935483870967742,
+        "Central": 0.7857142857142857,
+        "Southern": 0.3225806451612903
+      },
+      "confusion_matrix_path": "outputs/metrics/cnn_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.7248144626617432,
+      "accuracy": 0.6666666666666666,
+      "macro_f1": 0.6668430335097001,
+      "per_class_f1": {
+        "Northern": 0.8148148148148148,
+        "Central": 0.6857142857142857,
+        "Southern": 0.5
+      },
+      "confusion_matrix_path": "outputs/metrics/cnn_test_confusion_matrix.csv"
+    }
+  },
+  "baseline_best_valid_macro_f1": 0.6918445539135195
+}

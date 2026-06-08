@@ -144,3 +144,57 @@ Current validation results:
 
 `scikit-learn` is used only for the Phase 4 model and metric implementations.
 MFCC extraction is implemented locally with NumPy.
+
+## Phase 5: Lightweight CNN
+
+Phase 5 trains a small CNN from standardized log-Mel spectrograms. The feature
+extractor is implemented with NumPy and reuses the Phase 4 spectrogram/Mel
+helpers, while model training uses PyTorch.
+
+Install/update dependencies:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements.txt
+```
+
+Run with automatic device selection. On Apple Silicon, `auto` prioritizes
+PyTorch MPS, then CUDA, then CPU:
+
+```bash
+.venv/bin/python -m src.training.train_cnn --overwrite
+```
+
+Device can also be selected explicitly:
+
+```bash
+.venv/bin/python -m src.training.train_cnn --overwrite --device mps
+.venv/bin/python -m src.training.train_cnn --overwrite --device cuda
+.venv/bin/python -m src.training.train_cnn --overwrite --device cpu
+```
+
+For CUDA, install the CUDA-enabled PyTorch wheel that matches the target machine
+from the official PyTorch selector before using `--device cuda`.
+
+Generated outputs:
+
+- `outputs/metrics/cnn_results.json`
+- `outputs/metrics/cnn_training_log.csv`
+- `outputs/metrics/cnn_valid_confusion_matrix.csv`
+- `outputs/metrics/cnn_test_confusion_matrix.csv`
+- `outputs/models/lightweight_cnn_logmel.pt`
+- `outputs/reports/phase5_cnn_report.md`
+
+The checkpoint under `outputs/models/` is intentionally ignored by Git. Metrics
+and reports are small text artifacts and can be versioned.
+
+Current CNN results from the local run:
+
+| Split | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| Train | 0.7900 | 0.7846 |
+| Validation | 0.4222 | 0.4339 |
+| Test | 0.6667 | 0.6668 |
+
+The current environment selected `cpu` because PyTorch reported both MPS and
+CUDA as unavailable. The script will still use MPS or CUDA automatically when
+the installed PyTorch build exposes those devices.

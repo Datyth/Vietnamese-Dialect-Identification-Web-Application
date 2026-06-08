@@ -1,5 +1,125 @@
 # Implementation Report
 
+## Latest Update: Phase 5 Lightweight CNN
+
+### Task Summary
+
+Implemented Phase 5 with a PyTorch lightweight CNN trained from standardized
+log-Mel spectrograms extracted from the Phase 2 fixed-length audio.
+
+### Files Changed
+
+| File or output | Purpose |
+| --- | --- |
+| `src/features/logmel.py` | NumPy log-Mel spectrogram extraction with per-sample standardization. |
+| `src/models/cnn.py` | Lightweight 3-block CNN for 3-class dialect classification. |
+| `src/training/train_cnn.py` | Phase 5 training script with auto/mps/cuda/cpu device selection, early stopping, checkpointing, metrics, and reports. |
+| `tests/test_logmel.py`, `tests/test_cnn.py` | Unit tests for log-Mel shape, CNN forward pass, and device resolver behavior. |
+| `requirements.txt`, `pyproject.toml` | Added `torch>=2.7,<3` for CNN training. |
+| `README.md`, `READING_GUIDE.md` | Added Phase 5 commands, outputs, device notes, and reading path. |
+| `outputs/metrics/cnn_results.json` | Phase 5 metrics JSON. |
+| `outputs/metrics/cnn_training_log.csv` | Per-epoch train/validation log. |
+| `outputs/metrics/cnn_valid_confusion_matrix.csv`, `outputs/metrics/cnn_test_confusion_matrix.csv` | CNN confusion matrices. |
+| `outputs/reports/phase5_cnn_report.md` | Short Phase 5 report. |
+
+### Implementation Scope
+
+Included:
+
+- Log-Mel input shaped `[batch, 1, 64, 1599]` from 16 kHz / 16 s audio.
+- Lightweight CNN trained from scratch using AdamW and cross entropy.
+- Device resolver with exact `auto -> mps -> cuda -> cpu` priority.
+- Explicit `--device mps` or `--device cuda` raises a clear error when unavailable.
+- Best checkpoint saved by validation macro F1.
+- Validation/test confusion matrices and training log.
+
+Not included:
+
+- No pretrained model, PhoWhisper, inference API, web app, ONNX export, or audio
+  augmentation.
+- The checkpoint under `outputs/models/` remains intentionally ignored by Git.
+
+### Design Decisions
+
+- Added PyTorch because Phase 5 requires a real CNN; NumPy/scikit-learn is not a
+  practical fit for training a CNN.
+- Kept log-Mel extraction in NumPy and reused existing spectrogram/Mel helpers
+  to avoid adding `librosa` or `torchaudio`.
+- Used a small 3-block CNN to keep the model appropriate for the lightweight
+  course project scope.
+- Cloned the best model state before continuing training so the stored best
+  checkpoint cannot be mutated by later epochs.
+
+### Commands Run
+
+```bash
+sed -n '1,220p' PLAN.md
+git status --short
+sed -n '1,220p' pyproject.toml
+sed -n '1,260p' src/features/mfcc.py
+sed -n '1,420p' src/training/train_baseline.py
+uv pip install --python .venv/bin/python -r requirements.txt
+env UV_CACHE_DIR=/tmp/vimd-uv-cache uv pip install --python .venv/bin/python -r requirements.txt
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -c "import torch; print(torch.__version__); print('mps', hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()); print('cuda', torch.cuda.is_available())"
+.venv/bin/python -m src.training.train_cnn --overwrite --device auto
+cat outputs/metrics/cnn_results.json
+sed -n '1,220p' outputs/reports/phase5_cnn_report.md
+head -n 8 outputs/metrics/cnn_training_log.csv
+cat outputs/metrics/cnn_valid_confusion_matrix.csv
+cat outputs/metrics/cnn_test_confusion_matrix.csv
+ls -lh outputs/models/lightweight_cnn_logmel.pt
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Dependency install | Passed after setting `UV_CACHE_DIR=/tmp/vimd-uv-cache` and allowing network for PyTorch. |
+| Unit tests | Passed: 15 tests. |
+| Python compilation | Passed for `src` and `tests`. |
+| Phase 5 training | Passed: early stopped at epoch 21; best epoch 13. |
+| Checkpoint | Created locally: `outputs/models/lightweight_cnn_logmel.pt` (~102 KB). |
+| Metrics/report artifacts | Created under `outputs/metrics/` and `outputs/reports/`. |
+
+PyTorch device probe:
+
+```text
+torch 2.12.0
+mps False
+cuda False
+```
+
+CNN metrics:
+
+| Split | Accuracy | Macro F1 |
+| --- | ---: | ---: |
+| Train | 0.7900 | 0.7846 |
+| Validation | 0.4222 | 0.4339 |
+| Test | 0.6667 | 0.6668 |
+
+Current best Phase 4 validation macro F1 remains higher at 0.6918.
+
+### Known Limitations
+
+- The local PyTorch build/environment reported both MPS and CUDA unavailable, so
+  the verified full run used CPU despite the requested Apple Silicon support.
+- Validation/test sets contain only 45 samples each, so metrics are noisy.
+- CNN validation macro F1 did not beat the Phase 4 SVM baseline in this run.
+- Feature extraction is computed inside the training run and not cached.
+
+### Reviewer Priorities
+
+1. Confirm whether CPU-verified Phase 5 is acceptable or rerun on a PyTorch build
+   where `torch.backends.mps.is_available()` returns true.
+2. Review whether the CNN should become the deployment candidate despite lower
+   validation macro F1 than SVM.
+3. Keep future inference code routed through the same Phase 2 audio preprocessing
+   and Phase 5 log-Mel feature extraction.
+
+---
+
 ## Latest Update: Functional Commit Split
 
 ### Task Summary

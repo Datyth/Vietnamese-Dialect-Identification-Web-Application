@@ -1,5 +1,109 @@
 # Implementation Report
 
+## Latest Update: Functional Commit Split
+
+### Task Summary
+
+Split the current repository work into small Git commits grouped by implemented
+functionality.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `reports/implementation_report.md` | Recorded the commit split and verification details. |
+
+### Implementation Scope
+
+Included:
+
+- Reviewed the current phase plan and Git worktree before committing.
+- Fixed `.gitignore` so local data/audio artifacts remain ignored without
+  accidentally ignoring `src/data/`.
+- Created focused commits for setup/scope, Phase 1 metadata, Phase 2 audio
+  preprocessing, Phase 4 MFCC baseline, and project documentation.
+
+Not included:
+
+- No code behavior changes beyond the `.gitignore` correction needed to commit
+  `src/data/`.
+- No pushed remote commits.
+- No WAV audio files, local virtual environment, Python cache files, or saved
+  model pickles were committed.
+
+### Commit Split
+
+| Commit | Purpose |
+| --- | --- |
+| `6b4f2a9 chore: set up project scope and dependencies` | Scope docs, project dependencies, ignore rules, and minimal entrypoint. |
+| `e9a4c6a feat(data): prepare ViMD metadata subset` | Phase 1 metadata script, label mapping, metadata tests, CSV metadata summaries, and Phase 1 report. |
+| `b180213 feat(audio): add fixed-length preprocessing pipeline` | Shared audio utilities, preprocessing script, preprocessing tests, preprocessed metadata, and minimal EDA outputs. |
+| `38f21ac feat(baseline): train MFCC classical models` | MFCC feature extraction, baseline training, MFCC tests, metrics, confusion matrices, and Phase 4 report. |
+| `b1d076a docs: document workflow and reading guide` | README updates, beginner reading guide, and implementation report context. |
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+git status --short
+git log --oneline --decorate -5
+git diff --stat
+git status --untracked-files=all --short
+git ls-files
+sed -n '1,220p' .gitignore
+git diff -- .gitignore README.md
+git status --ignored --short
+rg --files data
+rg --files outputs
+find src -maxdepth 3 -type f -print
+du -sh data/processed outputs configs src tests reports README.md READING_GUIDE.md OVERVIEW.md PLAN.md AGENTS.md pyproject.toml requirements.txt main.py
+du -sh data/processed/*.csv outputs/metrics/* outputs/reports/*
+.venv/bin/python -m unittest discover -s tests -v
+git add ...
+git diff --cached --name-status
+git diff --cached --stat
+git commit -m "chore: set up project scope and dependencies"
+git commit -m "feat(data): prepare ViMD metadata subset"
+git commit -m "feat(audio): add fixed-length preprocessing pipeline"
+git commit -m "feat(baseline): train MFCC classical models"
+git commit -m "docs: document workflow and reading guide"
+git status --short
+git status --ignored --short
+git log --oneline --decorate -8
+git diff --stat HEAD
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Unit tests before commit split | Passed: 11 tests. |
+| Tracked worktree after split | Clean. |
+| Ignored local artifacts | `.venv/`, WAV audio folders, `outputs/models/`, and `__pycache__/` remain ignored. |
+
+Unit test output summary:
+
+```text
+Ran 11 tests in 0.008s
+OK
+```
+
+### Known Limitations
+
+- The commits are local only; nothing was pushed to `origin/main`.
+- Large audio WAV files and saved model pickles remain intentionally untracked.
+- Dataset metadata CSVs are committed because they are small enough compared with
+  audio artifacts and are useful for reproducing the current phase outputs.
+
+### Reviewer Priorities
+
+1. Review the commit boundaries before pushing.
+2. Confirm whether generated CSV/metric artifacts should stay versioned for the
+   course submission.
+3. Push the branch only after accepting the local commit history.
+
+---
+
 ## Latest Update: Beginner Reading Guide
 
 ### Task Summary

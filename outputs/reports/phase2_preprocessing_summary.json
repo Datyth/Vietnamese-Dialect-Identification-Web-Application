@@ -1,0 +1,81 @@
+{
+  "phase": "phase2_audio_preprocessing",
+  "target_sample_rate": 16000,
+  "fixed_duration_seconds": 16.0,
+  "target_samples": 256000,
+  "output_root": "data/processed/audio_preprocessed_16s",
+  "preprocessed_count": 390,
+  "issue_count": 0,
+  "exact_shape_count": 390,
+  "split_class_counts": [
+    {
+      "source_split": "train",
+      "label": "Northern",
+      "preprocessed_samples": 100
+    },
+    {
+      "source_split": "train",
+      "label": "Central",
+      "preprocessed_samples": 100
+    },
+    {
+      "source_split": "train",
+      "label": "Southern",
+      "preprocessed_samples": 100
+    },
+    {
+      "source_split": "valid",
+      "label": "Northern",
+      "preprocessed_samples": 15
+    },
+    {
+      "source_split": "valid",
+      "label": "Central",
+      "preprocessed_samples": 15
+    },
+    {
+      "source_split": "valid",
+      "label": "Southern",
+      "preprocessed_samples": 15
+    },
+    {
+      "source_split": "test",
+      "label": "Northern",
+      "preprocessed_samples": 15
+    },
+    {
+      "source_split": "test",
+      "label": "Central",
+      "preprocessed_samples": 15
+    },
+    {
+      "source_split": "test",
+      "label": "Southern",
+      "preprocessed_samples": 15
+    }
+  ],
+  "original_duration_seconds": {
+    "min": 2.51,
+    "median": 15.9409065,
+    "mean": 16.01187181794872,
+    "max": 31.818438
+  },
+  "preprocessed_duration_seconds": {
+    "min": 16.0,
+    "median": 16.0,
+    "mean": 16.0,
+    "max": 16.0
+  },
+  "preprocessed_rms": {
+    "min": 0.030338,
+    "median": 0.0765615,
+    "mean": 0.07173189743589743,
+    "max": 0.089196
+  },
+  "preprocessed_peak": {
+    "min": 0.237183,
+    "median": 0.6066435,
+    "mean": 0.626977,
+    "max": 0.990021
+  }
+}

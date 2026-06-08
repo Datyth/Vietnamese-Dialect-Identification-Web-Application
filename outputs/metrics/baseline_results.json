@@ -1,0 +1,70 @@
+{
+  "phase": "phase4_mfcc_baseline",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "feature": {
+    "name": "mfcc_mean_std",
+    "dimension": 26,
+    "n_mfcc": 13,
+    "sample_rate": 16000,
+    "target_samples": 256000
+  },
+  "split_counts": {
+    "train": 300,
+    "valid": 45,
+    "test": 45
+  },
+  "models": {
+    "logistic_regression": {
+      "model_path": "outputs/models/logistic_regression_mfcc.pkl",
+      "valid": {
+        "accuracy": 0.6,
+        "macro_f1": 0.5980952380952381,
+        "per_class_f1": {
+          "Northern": 0.5142857142857142,
+          "Central": 0.8,
+          "Southern": 0.48
+        },
+        "confusion_matrix_path": "outputs/metrics/logistic_regression_valid_confusion_matrix.csv"
+      },
+      "test": {
+        "accuracy": 0.6222222222222222,
+        "macro_f1": 0.6291806958473626,
+        "per_class_f1": {
+          "Northern": 0.4666666666666667,
+          "Central": 0.8148148148148148,
+          "Southern": 0.6060606060606061
+        },
+        "confusion_matrix_path": "outputs/metrics/logistic_regression_test_confusion_matrix.csv"
+      }
+    },
+    "svm": {
+      "model_path": "outputs/models/svm_mfcc.pkl",
+      "valid": {
+        "accuracy": 0.6888888888888889,
+        "macro_f1": 0.6918445539135195,
+        "per_class_f1": {
+          "Northern": 0.6666666666666666,
+          "Central": 0.8571428571428571,
+          "Southern": 0.5517241379310345
+        },
+        "confusion_matrix_path": "outputs/metrics/svm_valid_confusion_matrix.csv"
+      },
+      "test": {
+        "accuracy": 0.6222222222222222,
+        "macro_f1": 0.6264491410208874,
+        "per_class_f1": {
+          "Northern": 0.5161290322580645,
+          "Central": 0.896551724137931,
+          "Southern": 0.4666666666666667
+        },
+        "confusion_matrix_path": "outputs/metrics/svm_test_confusion_matrix.csv"
+      }
+    }
+  },
+  "best_model_by_valid_macro_f1": "svm"
+}

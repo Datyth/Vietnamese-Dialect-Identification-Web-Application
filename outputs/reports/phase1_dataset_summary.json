@@ -1,0 +1,68 @@
+{
+  "dataset": "nguyendv02/ViMD_Dataset",
+  "revision": "main",
+  "license": "CC-BY-NC-ND-4.0",
+  "metadata_samples": 18949,
+  "metadata_provinces": 63,
+  "metadata_speakers": 12953,
+  "split_counts": {
+    "test": 2026,
+    "train": 15023,
+    "valid": 1900
+  },
+  "class_counts": {
+    "Northern": 7448,
+    "Central": 5930,
+    "Southern": 5571
+  },
+  "speaker_counts": {
+    "Northern": 5411,
+    "Central": 4073,
+    "Southern": 3469
+  },
+  "downloaded_class_counts": {
+    "Central": 130,
+    "Northern": 130,
+    "Southern": 130
+  },
+  "downloaded_split_counts": {
+    "test": 45,
+    "train": 300,
+    "valid": 45
+  },
+  "downloaded_split_class_counts": {
+    "train:Northern": 100,
+    "train:Central": 100,
+    "train:Southern": 100,
+    "valid:Northern": 15,
+    "valid:Central": 15,
+    "valid:Southern": 15,
+    "test:Northern": 15,
+    "test:Central": 15,
+    "test:Southern": 15
+  },
+  "source_speaker_split_overlap_count": 2,
+  "selected_speaker_split_overlap_count": 0,
+  "label_mapping": {
+    "North": "Northern",
+    "Central": "Central",
+    "South": "Southern"
+  },
+  "audio_status_counts": {
+    "downloaded": 390,
+    "not_selected_under_data_budget": 18559
+  },
+  "downloaded_audio_bytes": 199845320,
+  "data_directory_bytes": 252100349,
+  "max_data_bytes": 1000000000,
+  "data_cap_respected": true,
+  "selection_seed": 42,
+  "target_sample_rate": 16000,
+  "target_samples_per_label": {
+    "train": 100,
+    "valid": 15,
+    "test": 15
+  },
+  "source_note": "Complete metadata is read from official original Parquet shards. The local subset is extracted shard-by-shard, prioritizes shorter files and speaker diversity, and stores mono 16 kHz PCM WAV files under the local byte budget. Source splits are preserved.",
+  "dataset_card_record_count": 18949
+}

@@ -1,0 +1,10 @@
+source_split,label,total_samples,downloaded_samples,target_samples
+train,Northern,5913,100,100
+train,Central,4705,100,100
+train,Southern,4405,100,100
+valid,Northern,752,15,15
+valid,Central,602,15,15
+valid,Southern,546,15,15
+test,Northern,783,15,15
+test,Central,623,15,15
+test,Southern,620,15,15

@@ -56,8 +56,8 @@
   ],
   "original_duration_seconds": {
     "min": 2.51,
-    "median": 15.9409065,
-    "mean": 16.01187181794872,
+    "median": 15.889,
+    "mean": 15.917224856410256,
     "max": 31.818438
   },
   "preprocessed_duration_seconds": {
@@ -68,14 +68,14 @@
   },
   "preprocessed_rms": {
     "min": 0.030338,
-    "median": 0.0765615,
-    "mean": 0.07173189743589743,
+    "median": 0.076539,
+    "mean": 0.07163736153846154,
     "max": 0.089196
   },
   "preprocessed_peak": {
     "min": 0.237183,
-    "median": 0.6066435,
-    "mean": 0.626977,
+    "median": 0.601929,
+    "mean": 0.6275900102564103,
     "max": 0.990021
   }
 }

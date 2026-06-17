@@ -1,3 +1,47 @@
+# Implementation Report - Streamlit App
+
+Summary
+-------
+
+Added a single-file Streamlit app to perform inference with the trained MFCC+SVM baseline.
+
+Files changed
+-------------
+
+- [app.py](app.py)
+
+Commands to run
+---------------
+
+From the repository root, run:
+
+```bash
+streamlit run app.py
+```
+
+Optional (WSL to expose to host):
+
+```bash
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+```
+
+Checks performed
+----------------
+
+- Inspected `src/utils/audio.py` and `src/features/mfcc.py` to reuse existing functions.
+- Created `app.py` to load uploaded WAV bytes, run the project's deterministic preprocessing, extract MFCC mean/std features, load `outputs/models/svm_mfcc.pkl`, and predict.
+
+Limitations / Uncertainty
+-------------------------
+
+- The app relies on `soxr` being available (used by `src.utils.audio.resample_audio`). If `soxr` is not installed in the environment, resampling will fail. A fallback resampler was not implemented to keep the app minimal and aligned with existing project utilities.
+- The model path is `outputs/models/svm_mfcc.pkl`; ensure the file exists and is compatible with `joblib.load`.
+
+Next steps (optional)
+---------------------
+
+- Add a small Dockerfile or requirements snippet for deploying the Streamlit app.
+- Add safety/error tests and CI to run a smoke check of the app import.
 # Implementation Report
 
 ## Latest Update: Phase 6 PhoWhisper And Phase 7 Final Evaluation

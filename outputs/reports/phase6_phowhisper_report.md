@@ -1,4 +1,4 @@
-# Phase 6 PhoWhisper-base Report
+# Phase 6 PhoWhisper-base Fine-Tuning Report
 
 PhoWhisper-base was fine-tuned end-to-end for 3-class dialect classification using preprocessed 16 kHz / 16 s audio.
 

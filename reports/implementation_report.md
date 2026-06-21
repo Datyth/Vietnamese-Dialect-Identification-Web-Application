@@ -1,5 +1,286 @@
 # Implementation Report
 
+## Latest Update: Resumable ViMD Shard Downloads
+
+### Task Summary
+
+Fixed truncated large-shard downloads such as `train-00101-of-00103.parquet`,
+where the connection ended at 317,249,630 of 381,107,172 expected bytes.
+
+### Root Cause
+
+The downloader treated an early EOF as a final size mismatch, deleted the
+partial file, and raised immediately. Large 200–400 MB Hugging Face shards are
+more likely to encounter transient connection interruption.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/data/prepare_metadata.py` | Added five-attempt retry, HTTP Range resume, partial-file preservation, and byte-budget accounting for resumed files. |
+| `tests/test_prepare_metadata.py` | Added a truncated-response test that resumes from byte 6 and verifies exact output content. |
+| `README.md` | Documented retry/resume behavior. |
+| `reports/implementation_report.md` | Recorded diagnosis and verification. |
+
+### Commands Run
+
+```bash
+sed -n '1,220p' PLAN.md
+.venv/bin/python -m unittest tests.test_prepare_metadata -v
+.venv/bin/python -m compileall -q src/data/prepare_metadata.py tests/test_prepare_metadata.py
+curl -L --range 317249630-317250653 --output /dev/null --dump-header - https://huggingface.co/datasets/nguyendv02/ViMD_Dataset/resolve/main/data/train-00101-of-00103.parquet
+.venv/bin/python -c "... urllib Range request for bytes 317249630-317250653 ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Focused Phase 1 tests | Passed: 7 tests. |
+| Python compilation | Passed. |
+| Simulated truncated response | Passed: second request sent `Range: bytes=6-` and reconstructed the exact 10-byte file. |
+| Real Hugging Face Range request | Passed: HTTP 206, `Content-Range: bytes 317249630-317250653/381107172`, 1,024 bytes received. |
+| Pipeline urllib Range request | Passed through Hugging Face redirect with HTTP 206 and correct content range. |
+
+### Known Limitations
+
+- The full 381 MB shard was not redownloaded during verification; only a 1 KB
+  range was requested from the real endpoint.
+- After five failed attempts the script exits but preserves `.part` under
+  `data/.phase1_tmp/`, allowing the same command to resume later.
+
+### Reviewer Priorities
+
+1. Rerun the same data command. Previously extracted WAV files are reused.
+2. Do not manually delete `data/.phase1_tmp/*.part` unless restarting a shard
+   from byte zero is intentional.
+
+---
+
+## Latest Update: Large Dataset Shard Selection Fix
+
+### Task Summary
+
+Fixed Phase 1 failure for large balanced targets such as 4,000 train and 500
+validation/test samples per label. Shard selection is no longer limited to
+three Parquet files per split.
+
+### Root Cause
+
+`choose_source_shards()` exhaustively searched only combinations of one to
+three shards. The 10 GB configuration requires many shards, so it failed before
+downloading audio with `Cannot cover requested train targets with three shards`.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/data/prepare_metadata.py` | Replaced the three-shard search with deterministic greedy coverage that scales to all available shards. |
+| `tests/test_prepare_metadata.py` | Added coverage requiring four shards per split. |
+| `README.md` | Documented scalable shard selection and byte-budget enforcement. |
+| `reports/implementation_report.md` | Recorded diagnosis, fix, and verification. |
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+sed -n '220,560p' src/data/prepare_metadata.py
+.venv/bin/python -m unittest tests.test_prepare_metadata -v
+.venv/bin/python -m compileall -q src/data/prepare_metadata.py tests/test_prepare_metadata.py
+.venv/bin/python -c "... simulate 4000/500/500 targets from metadata_clean.csv ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Phase 1 focused tests | Passed: 6 tests. |
+| Python compilation | Passed. |
+| More-than-three-shard regression | Passed: selected four shards for every split. |
+| Real metadata simulation | Passed: 107 shards selected for 4,000/500/500 targets—84 train, 11 valid, and 12 test. |
+
+### Known Limitations
+
+- The full 10 GB download was not repeated during verification because it is a
+  long external transfer. The selection stage that raised the reported error
+  was reproduced and now completes locally.
+- Final downloaded counts still depend on the 10 GB cap, remote shard sizes,
+  available audio, and normalization output sizes.
+
+### Reviewer Priorities
+
+1. Rerun the same `scripts/data.sh` command; existing downloaded audio is reused
+   when `--overwrite` is supplied.
+2. Keep at least 18–20 GB free for source and preprocessed copies together.
+
+---
+
+## Latest Update: Automated Data And Training Pipelines
+
+### Task Summary
+
+Implemented executable shell scripts that run the existing data phases and
+training/evaluation phases in their required order.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `scripts/data.sh` | Runs metadata/audio acquisition, preprocessing, and minimal EDA with configurable data budget, split sizes, and seed. |
+| `scripts/train.sh` | Runs MFCC baselines, CNN, both PhoWhisper modes, and final evaluation. |
+| `README.md` | Documents pipeline commands, overwrite behavior, device selection, and environment overrides. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Implementation Scope And Decisions
+
+- Scripts resolve the repository root, so they can be called from any working
+  directory.
+- `.venv/bin/python` is the default; `PYTHON_BIN` can override it.
+- Existing outputs are protected unless the caller explicitly passes
+  `--overwrite`.
+- `scripts/data.sh` exposes `--max-data-bytes`, per-label train/validation/test
+  targets, `--seed`, and `--metadata-only` from the underlying metadata CLI.
+- `scripts/train.sh` accepts `auto`, `mps`, `cuda`, or `cpu` and forwards the
+  selected device to CNN and both PhoWhisper experiments.
+- Frozen PhoWhisper uses the verified experiment settings: learning rate
+  `1e-3`, 20 maximum epochs, and patience 5.
+- No dependency or additional orchestration framework was added.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+sed -n '1,260p' scripts/data.sh
+sed -n '1,320p' scripts/train.sh
+chmod +x scripts/data.sh scripts/train.sh
+bash -n scripts/data.sh scripts/train.sh
+scripts/data.sh --help
+scripts/train.sh --help
+env PYTHON_BIN=/bin/echo scripts/data.sh --max-data-bytes 1000000000 --train-per-label 120 --valid-per-label 20 --test-per-label 20 --seed 7 --overwrite
+env PYTHON_BIN=/bin/echo scripts/data.sh --metadata-only --seed 9 --overwrite
+env PYTHON_BIN=/usr/bin/true scripts/train.sh --device mps --overwrite
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Bash syntax | Passed for both scripts. |
+| Help commands | Passed with exit code 0. |
+| Data pipeline dry run | Passed in Phase 1 → Phase 2/3 order with all download arguments forwarded correctly. |
+| Metadata-only dry run | Passed and skipped audio preprocessing. |
+| Training pipeline dry run | Passed in Phase 4 → Phase 5 → Phase 6a → Phase 6b → Phase 7 order. |
+| Executable permissions | Set on both scripts. |
+
+### Known Limitations
+
+- A full data run was not repeated because it requires remote ViMD access and
+  would regenerate the existing dataset.
+- A full training run was not repeated because CNN and both PhoWhisper runs are
+  compute-intensive; their individual pipelines were already verified earlier.
+- Explicit `--device mps` may require running outside a managed sandbox even
+  when MPS works in the user's normal terminal.
+
+### Reviewer Priorities
+
+1. Run `scripts/data.sh --overwrite` only when dataset artifacts should be
+   regenerated.
+2. On Apple Silicon, use `scripts/train.sh --device mps --overwrite` from a
+   normal terminal to force Apple GPU execution.
+
+---
+
+## Latest Update: Frozen PhoWhisper Baseline And Neural Comparison
+
+### Task Summary
+
+Added a pretrained PhoWhisper comparison run that keeps the encoder frozen,
+trains only the dialect classification stack, and reports it separately from
+the existing full fine-tuning result and custom CNN.
+
+### Files Changed
+
+| File or output | Purpose |
+| --- | --- |
+| `src/training/train_phowhisper.py` | Added `frozen_encoder` and `full_fine_tune` modes, mode-specific output paths, trainable-parameter reporting, and frozen-encoder handling. |
+| `src/evaluation/final_evaluation.py` | Added both PhoWhisper variants and a focused three-model neural comparison report. |
+| `tests/test_phowhisper.py`, `tests/test_final_evaluation.py` | Added frozen-parameter, output-path, aggregation, and neural-report checks. |
+| `README.md`, `READING_GUIDE.md` | Documented the two PhoWhisper experiments, commands, semantics, and results. |
+| `outputs/metrics/phowhisper_pretrained_*` | Frozen-encoder metrics, training log, confusion matrices, and predictions. |
+| `outputs/reports/phase6_phowhisper_pretrained_report.md` | Frozen-encoder experiment report. |
+| `outputs/metrics/final_comparison.csv`, `outputs/reports/neural_model_comparison.md`, `outputs/reports/error_analysis.md` | Updated final and focused comparisons. |
+
+### Implementation Scope And Decisions
+
+- The pretrained baseline freezes every PhoWhisper encoder parameter.
+- Only the newly initialized projector and three-class classifier are trained:
+  132,099 of 20,722,691 parameters in `WhisperForAudioClassification`.
+- A completely untouched ASR model cannot produce dialect classes because it
+  has no Northern/Central/Southern output head. The report therefore calls this
+  a frozen-encoder baseline, not zero-shot inference.
+- Full fine-tuning keeps its existing artifacts; frozen mode writes separate
+  `phowhisper_pretrained_*` artifacts.
+- Both runs use the same 300/45/45 metadata splits and seed 42.
+- No dependency was added.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+git status --short
+head -n 8 data/processed/preprocessed_metadata.csv
+.venv/bin/python -m unittest tests.test_phowhisper tests.test_final_evaluation -v
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m compileall -q src tests
+env HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m src.training.train_phowhisper --training-mode frozen_encoder --learning-rate 1e-3 --max-epochs 20 --patience 5 --overwrite --device auto
+.venv/bin/python -c "import platform, torch; ..."
+system_profiler SPDisplaysDataType
+env HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m src.training.train_phowhisper --training-mode frozen_encoder --learning-rate 1e-3 --max-epochs 20 --patience 5 --overwrite --device mps
+.venv/bin/python -m src.evaluation.final_evaluation --overwrite
+.venv/bin/python -c "import torch; ... compare frozen checkpoint with pretrained encoder ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Full unit tests | Passed: 23 tests. |
+| Python compilation | Passed for `src` and `tests`. |
+| Apple GPU probe outside sandbox | Passed: Apple M5, MPS built and available, tensor allocated on `mps:0`. |
+| Frozen PhoWhisper training | Passed on MPS: early stopped at epoch 13, best epoch 8. |
+| Encoder immutability | Passed: three sampled encoder tensors were bit-identical to pretrained weights (`changed_elements=0`). |
+| Final evaluation | Passed: SVM remains best by validation macro F1. |
+
+Neural model comparison:
+
+| Model | Valid Macro F1 | Test Macro F1 | Device |
+| --- | ---: | ---: | --- |
+| Custom CNN | 0.4339 | 0.6668 | CPU |
+| PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 | MPS |
+| PhoWhisper fine-tuned | 0.6623 | 0.7113 | MPS |
+
+### Known Limitations
+
+- Validation and test contain only 45 files each, so the metric differences are
+  noisy; the frozen variant's higher test score is not enough to claim it is
+  generally better.
+- The frozen baseline still trains a small supervised classification stack; raw
+  PhoWhisper ASR is not a zero-shot dialect classifier.
+- Managed sandbox processes did not expose MPS and initially ran on CPU. The
+  final saved frozen artifacts were regenerated outside the sandbox with
+  explicit `--device mps` after an MPS tensor probe passed.
+- Checkpoints and Hugging Face cache remain ignored under `outputs/models/`.
+
+### Reviewer Priorities
+
+1. Use `outputs/reports/neural_model_comparison.md` for the requested three-row
+   comparison.
+2. Keep model selection based on validation macro F1, not the highest test score.
+3. Preserve the distinction between frozen pretrained encoder and full
+   fine-tuning in future inference/app work.
+
+---
+
 ## Latest Update: Phase 6 PhoWhisper And Phase 7 Final Evaluation
 
 ### Task Summary

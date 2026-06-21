@@ -25,6 +25,7 @@ FINAL_COMPARISON_FIELDS = [
     "test_macro_f1",
     "model_size_mb",
     "latency_seconds_per_sample",
+    "device",
     "metrics_path",
 ]
 ERROR_FIELDS = [
@@ -36,6 +37,18 @@ ERROR_FIELDS = [
     "duration",
     "notes",
 ]
+NEURAL_MODEL_NAMES = (
+    "lightweight_cnn",
+    "phowhisper_pretrained_frozen_encoder",
+    "phowhisper_fine_tuned",
+)
+NEURAL_MODEL_DISPLAY_NAMES = {
+    "lightweight_cnn": "Custom CNN",
+    "phowhisper_pretrained_frozen_encoder": (
+        "PhoWhisper (pretrained, frozen encoder)"
+    ),
+    "phowhisper_fine_tuned": "PhoWhisper (fine-tuned)",
+}
 
 
 def read_json(path: Path) -> dict[str, Any] | None:
@@ -49,6 +62,7 @@ def comparison_rows(
     baseline_path: Path,
     cnn_path: Path,
     phowhisper_path: Path,
+    phowhisper_pretrained_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     baseline = read_json(baseline_path)
@@ -65,8 +79,9 @@ def comparison_rows(
                     "model_size_mb": model_file_size_mb(
                         Path(model_results.get("model_path", ""))
                     ),
-                    "latency_seconds_per_sample": "",
-                    "metrics_path": baseline_path.as_posix(),
+                "latency_seconds_per_sample": "",
+                "device": "cpu",
+                "metrics_path": baseline_path.as_posix(),
                 }
             )
 
@@ -84,31 +99,55 @@ def comparison_rows(
                     Path(cnn.get("checkpoint_path", ""))
                 ),
                 "latency_seconds_per_sample": "",
+                "device": cnn.get("device", ""),
                 "metrics_path": cnn_path.as_posix(),
             }
         )
 
-    phowhisper = read_json(phowhisper_path)
-    if phowhisper:
-        latency = phowhisper.get("latency_estimate", {})
-        rows.append(
-            {
-                "model": "phowhisper_base",
-                "phase": phowhisper.get("phase", "phase6_phowhisper_base"),
-                "valid_accuracy": phowhisper["metrics"]["valid"]["accuracy"],
-                "valid_macro_f1": phowhisper["metrics"]["valid"]["macro_f1"],
-                "test_accuracy": phowhisper["metrics"]["test"]["accuracy"],
-                "test_macro_f1": phowhisper["metrics"]["test"]["macro_f1"],
-                "model_size_mb": phowhisper.get("model_size_mb", ""),
-                "latency_seconds_per_sample": latency.get(
-                    "mean_seconds_per_sample", ""
-                ),
-                "metrics_path": phowhisper_path.as_posix(),
-            }
+    if phowhisper_pretrained_path is not None:
+        append_phowhisper_row(
+            rows,
+            phowhisper_pretrained_path,
+            "phowhisper_pretrained_frozen_encoder",
+            "phase6_phowhisper_pretrained_frozen_encoder",
         )
+    append_phowhisper_row(
+        rows,
+        phowhisper_path,
+        "phowhisper_fine_tuned",
+        "phase6_phowhisper_fine_tuned",
+    )
     if not rows:
         raise ValueError("No metric JSON files found for final comparison.")
     return rows
+
+
+def append_phowhisper_row(
+    rows: list[dict[str, Any]],
+    metrics_path: Path,
+    model_name: str,
+    default_phase: str,
+) -> None:
+    results = read_json(metrics_path)
+    if not results:
+        return
+    latency = results.get("latency_estimate", {})
+    rows.append(
+        {
+            "model": model_name,
+            "phase": results.get("phase", default_phase),
+            "valid_accuracy": results["metrics"]["valid"]["accuracy"],
+            "valid_macro_f1": results["metrics"]["valid"]["macro_f1"],
+            "test_accuracy": results["metrics"]["test"]["accuracy"],
+            "test_macro_f1": results["metrics"]["test"]["macro_f1"],
+            "model_size_mb": results.get("model_size_mb", ""),
+            "latency_seconds_per_sample": latency.get(
+                "mean_seconds_per_sample", ""
+            ),
+            "device": results.get("device", ""),
+            "metrics_path": metrics_path.as_posix(),
+        }
+    )
 
 
 def model_file_size_mb(path: Path) -> str:
@@ -124,7 +163,11 @@ def best_model_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def write_comparison(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as output_file:
-        writer = csv.DictWriter(output_file, fieldnames=FINAL_COMPARISON_FIELDS)
+        writer = csv.DictWriter(
+            output_file,
+            fieldnames=FINAL_COMPARISON_FIELDS,
+            lineterminator="\n",
+        )
         writer.writeheader()
         for row in rows:
             formatted = dict(row)
@@ -137,6 +180,48 @@ def write_comparison(path: Path, rows: list[dict[str, Any]]) -> None:
                     f"{formatted['latency_seconds_per_sample']:.6f}"
                 )
             writer.writerow({field: formatted.get(field, "") for field in FINAL_COMPARISON_FIELDS})
+
+
+def write_neural_model_report(path: Path, rows: list[dict[str, Any]]) -> None:
+    rows_by_name = {row["model"]: row for row in rows}
+    missing = [name for name in NEURAL_MODEL_NAMES if name not in rows_by_name]
+    if missing:
+        raise ValueError(f"Missing neural model results: {missing}")
+    lines = [
+        "# Neural Model Comparison",
+        "",
+        "The pretrained PhoWhisper baseline keeps the encoder unchanged and trains "
+        "only its projector/classifier head. It is not zero-shot: the original ASR "
+        "model has no Northern/Central/Southern output head.",
+        "",
+        "| Model | Valid Accuracy | Valid Macro F1 | Test Accuracy | Test Macro F1 | Model Size (MB) | Latency (s/sample) | Device |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for name in NEURAL_MODEL_NAMES:
+        row = rows_by_name[name]
+        model_size = row.get("model_size_mb", "")
+        latency = row.get("latency_seconds_per_sample", "")
+        model_size_text = f"{float(model_size):.2f}" if model_size != "" else "N/A"
+        latency_text = f"{float(latency):.4f}" if latency != "" else "N/A"
+        lines.append(
+            f"| {NEURAL_MODEL_DISPLAY_NAMES[name]} | "
+            f"{float(row['valid_accuracy']):.4f} | "
+            f"{float(row['valid_macro_f1']):.4f} | "
+            f"{float(row['test_accuracy']):.4f} | "
+            f"{float(row['test_macro_f1']):.4f} | {model_size_text} | "
+            f"{latency_text} | {row.get('device', '') or 'N/A'} |"
+        )
+    lines.extend(
+        [
+            "",
+            "All rows use the same train/validation/test metadata splits. Model "
+            "selection remains based on validation macro F1; test metrics are not "
+            "used to select a model.",
+            "",
+        ]
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def read_preprocessed_metadata(path: Path) -> list[dict[str, str]]:
@@ -222,12 +307,17 @@ def prediction_rows_for_best_model(
     best_row: dict[str, Any],
     metadata_path: Path,
     phowhisper_predictions_path: Path,
+    phowhisper_pretrained_predictions_path: Path | None = None,
 ) -> list[dict[str, str]]:
     model_name = best_row["model"]
     if model_name == "svm":
         return baseline_test_predictions(metadata_path, Path("outputs/models/svm_mfcc.pkl"))
-    if model_name == "phowhisper_base":
+    if model_name == "phowhisper_fine_tuned":
         return read_prediction_rows(phowhisper_predictions_path)
+    if model_name == "phowhisper_pretrained_frozen_encoder":
+        if phowhisper_pretrained_predictions_path is None:
+            raise ValueError("Frozen-encoder PhoWhisper predictions path is required.")
+        return read_prediction_rows(phowhisper_pretrained_predictions_path)
     if model_name in {"logistic_regression", "lightweight_cnn"}:
         raise ValueError(
             f"Sample error generation for {model_name} is not implemented because "
@@ -343,9 +433,19 @@ def parse_args() -> argparse.Namespace:
         default=Path("outputs/metrics/phowhisper_results.json"),
     )
     parser.add_argument(
+        "--phowhisper-pretrained-path",
+        type=Path,
+        default=Path("outputs/metrics/phowhisper_pretrained_results.json"),
+    )
+    parser.add_argument(
         "--phowhisper-predictions-path",
         type=Path,
         default=Path("outputs/metrics/phowhisper_test_predictions.csv"),
+    )
+    parser.add_argument(
+        "--phowhisper-pretrained-predictions-path",
+        type=Path,
+        default=Path("outputs/metrics/phowhisper_pretrained_test_predictions.csv"),
     )
     parser.add_argument(
         "--comparison-path",
@@ -362,6 +462,11 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path("outputs/reports/error_analysis.md"),
     )
+    parser.add_argument(
+        "--neural-report-path",
+        type=Path,
+        default=Path("outputs/reports/neural_model_comparison.md"),
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -372,20 +477,28 @@ def main() -> None:
         args.comparison_path,
         args.sample_errors_path,
         args.report_path,
+        args.neural_report_path,
     ]
     if not args.overwrite:
         ensure_outputs_absent(output_paths)
 
-    rows = comparison_rows(args.baseline_path, args.cnn_path, args.phowhisper_path)
+    rows = comparison_rows(
+        args.baseline_path,
+        args.cnn_path,
+        args.phowhisper_path,
+        args.phowhisper_pretrained_path,
+    )
     best = best_model_row(rows)
     write_comparison(args.comparison_path, rows)
     predictions = prediction_rows_for_best_model(
         best,
         args.metadata_path,
         args.phowhisper_predictions_path,
+        args.phowhisper_pretrained_predictions_path,
     )
     errors = write_sample_errors(args.sample_errors_path, predictions)
     write_error_report(args.report_path, rows, best, errors, predictions)
+    write_neural_model_report(args.neural_report_path, rows)
     print(
         f"Phase 7 complete: best_model={best['model']}, "
         f"valid_macro_f1={float(best['valid_macro_f1']):.4f}, "

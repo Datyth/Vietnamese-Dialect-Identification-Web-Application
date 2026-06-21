@@ -10,6 +10,7 @@ from src.evaluation.final_evaluation import (
     comparison_rows,
     read_prediction_rows,
     write_error_report,
+    write_neural_model_report,
     write_sample_errors,
 )
 
@@ -21,6 +22,7 @@ class FinalEvaluationTests(unittest.TestCase):
             baseline = root / "baseline.json"
             cnn = root / "cnn.json"
             phowhisper = root / "phowhisper.json"
+            phowhisper_pretrained = root / "phowhisper_pretrained.json"
             baseline.write_text(
                 json.dumps(
                     {
@@ -63,12 +65,43 @@ class FinalEvaluationTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            phowhisper_pretrained.write_text(
+                json.dumps(
+                    {
+                        "phase": "phase6_phowhisper_pretrained_frozen_encoder",
+                        "model_size_mb": 79.0,
+                        "latency_estimate": {"mean_seconds_per_sample": 0.1},
+                        "metrics": {
+                            "valid": {"accuracy": 0.65, "macro_f1": 0.6},
+                            "test": {"accuracy": 0.7, "macro_f1": 0.68},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
 
-            rows = comparison_rows(baseline, cnn, phowhisper)
+            rows = comparison_rows(
+                baseline, cnn, phowhisper, phowhisper_pretrained
+            )
             best = best_model_row(rows)
 
-            self.assertEqual([row["model"] for row in rows], ["svm", "lightweight_cnn", "phowhisper_base"])
-            self.assertEqual(best["model"], "phowhisper_base")
+            self.assertEqual(
+                [row["model"] for row in rows],
+                [
+                    "svm",
+                    "lightweight_cnn",
+                    "phowhisper_pretrained_frozen_encoder",
+                    "phowhisper_fine_tuned",
+                ],
+            )
+            self.assertEqual(best["model"], "phowhisper_fine_tuned")
+
+            report = root / "neural_comparison.md"
+            write_neural_model_report(report, rows)
+            report_text = report.read_text(encoding="utf-8")
+            self.assertIn("Custom CNN", report_text)
+            self.assertIn("pretrained, frozen encoder", report_text)
+            self.assertIn("fine-tuned", report_text)
 
     def test_prediction_and_error_outputs_have_required_fields(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -107,13 +140,13 @@ class FinalEvaluationTests(unittest.TestCase):
                 report,
                 [
                     {
-                        "model": "phowhisper_base",
+                        "model": "phowhisper_fine_tuned",
                         "valid_macro_f1": 0.75,
                         "test_macro_f1": 0.78,
                     }
                 ],
                 {
-                    "model": "phowhisper_base",
+                    "model": "phowhisper_fine_tuned",
                     "valid_macro_f1": 0.75,
                     "test_macro_f1": 0.78,
                 },

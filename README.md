@@ -16,7 +16,10 @@ for the three project labels:
 The preparation command reads metadata columns from the remote Parquet shards,
 then processes one selected shard at a time. It prioritizes short files and
 speaker diversity, stores mono 16 kHz PCM WAV files, and removes each temporary
-shard before continuing. The default balanced subset is:
+shard before continuing. Large targets may span as many source shards as needed;
+interrupted shard downloads retry with HTTP Range and preserve `.part` files for
+the next run. The configured byte budget remains the limiting constraint. The
+default balanced subset is:
 
 | Split | Northern | Central | Southern |
 | --- | ---: | ---: | ---: |
@@ -75,6 +78,47 @@ Use a local uv virtual environment in the repository:
 uv venv .venv --python 3.10
 uv pip install --python .venv/bin/python -r requirements.txt
 ```
+
+## Automated Pipelines
+
+Run metadata acquisition and audio preprocessing in order:
+
+```bash
+scripts/data.sh
+```
+
+Customize the balanced download subset and data budget:
+
+```bash
+scripts/data.sh \
+  --max-data-bytes 1000000000 \
+  --train-per-label 100 \
+  --valid-per-label 15 \
+  --test-per-label 15 \
+  --seed 42 \
+  --overwrite
+```
+
+Use `scripts/data.sh --metadata-only` to prepare metadata without downloading or
+preprocessing audio.
+
+Run all training experiments and final evaluation in order:
+
+```bash
+scripts/train.sh --device auto
+```
+
+Both scripts refuse to overwrite existing outputs by default. Pass
+`--overwrite` only when the artifacts should be regenerated:
+
+```bash
+scripts/data.sh --overwrite
+scripts/train.sh --device mps --overwrite
+```
+
+Set `PYTHON_BIN` to use a different Python executable. When PhoWhisper is
+already cached, `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` keeps training
+offline.
 
 ## Phase 2: Audio Preprocessing
 
@@ -199,22 +243,46 @@ The current environment selected `cpu` because PyTorch reported both MPS and
 CUDA as unavailable. The script will still use MPS or CUDA automatically when
 the installed PyTorch build exposes those devices.
 
-## Phase 6: PhoWhisper-base Fine-Tuning
+## Phase 6: PhoWhisper-base Experiments
 
-Phase 6 fine-tunes one pretrained speech model, `vinai/PhoWhisper-base`, for the
-same three project labels. PhoWhisper-base is a Whisper-base-style model with an
-estimated 74M parameters and about 290 MB of published PyTorch weights. The
-training script uses `WhisperForAudioClassification`, so it fine-tunes the
-encoder/classification stack for dialect classification and does not run ASR
-generation.
+Phase 6 compares two uses of the same `vinai/PhoWhisper-base` checkpoint. The
+pretrained baseline freezes the encoder and trains only the projector/classifier
+head. The fine-tuned experiment updates the complete encoder/classification
+stack. Both use `WhisperForAudioClassification` and do not run ASR generation.
 
-Run:
+The frozen baseline is not zero-shot: the original ASR checkpoint has no
+Northern/Central/Southern output head, so a small supervised head is required.
+
+Run the pretrained frozen-encoder baseline:
 
 ```bash
-.venv/bin/python -m src.training.train_phowhisper --overwrite --device auto
+.venv/bin/python -m src.training.train_phowhisper \
+  --training-mode frozen_encoder \
+  --learning-rate 1e-3 \
+  --max-epochs 20 \
+  --patience 5 \
+  --overwrite \
+  --device auto
 ```
 
-Generated outputs:
+Run full fine-tuning:
+
+```bash
+.venv/bin/python -m src.training.train_phowhisper \
+  --training-mode full_fine_tune \
+  --overwrite \
+  --device auto
+```
+
+The frozen run writes `phowhisper_pretrained_*` artifacts, including:
+
+- `outputs/metrics/phowhisper_pretrained_results.json`
+- `outputs/metrics/phowhisper_pretrained_training_log.csv`
+- `outputs/metrics/phowhisper_pretrained_test_predictions.csv`
+- `outputs/models/phowhisper_pretrained_frozen_encoder.pt`
+- `outputs/reports/phase6_phowhisper_pretrained_report.md`
+
+The fine-tuned run keeps the existing artifact names:
 
 - `outputs/metrics/phowhisper_results.json`
 - `outputs/metrics/phowhisper_training_log.csv`
@@ -224,16 +292,16 @@ Generated outputs:
 - `outputs/models/phowhisper_dialect.pt`
 - `outputs/reports/phase6_phowhisper_report.md`
 
-Current local run:
+Current local comparison:
 
-| Split | Accuracy | Macro F1 |
-| --- | ---: | ---: |
-| Train | 0.9933 | 0.9933 |
-| Validation | 0.6667 | 0.6623 |
-| Test | 0.7111 | 0.7113 |
+| Model | Validation Macro F1 | Test Macro F1 | Device |
+| --- | ---: | ---: | --- |
+| PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 | MPS |
+| PhoWhisper fine-tuned | 0.6623 | 0.7113 | MPS |
 
-Training used `mps`, early-stopped after 6 epochs, and selected epoch 3 by
-validation macro F1. The local checkpoint is ignored by Git.
+The frozen encoder was verified unchanged against the downloaded checkpoint;
+only 132,099 of 20,722,691 classifier-model parameters were trainable. Local
+checkpoints are ignored by Git.
 
 ## Phase 7: Final Evaluation And Error Analysis
 
@@ -251,6 +319,7 @@ Generated outputs:
 - `outputs/metrics/final_comparison.csv`
 - `outputs/metrics/final_sample_errors.csv`
 - `outputs/reports/error_analysis.md`
+- `outputs/reports/neural_model_comparison.md`
 
 Current best model by validation macro F1 is still the Phase 4 SVM baseline:
 
@@ -259,4 +328,5 @@ Current best model by validation macro F1 is still the Phase 4 SVM baseline:
 | Logistic Regression | 0.5981 | 0.6292 |
 | SVM | 0.6918 | 0.6264 |
 | Lightweight CNN | 0.4339 | 0.6668 |
-| PhoWhisper-base | 0.6623 | 0.7113 |
+| PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 |
+| PhoWhisper fine-tuned | 0.6623 | 0.7113 |

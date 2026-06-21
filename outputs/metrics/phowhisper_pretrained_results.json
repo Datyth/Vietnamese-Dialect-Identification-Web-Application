@@ -1,0 +1,87 @@
+{
+  "phase": "phase6_phowhisper_pretrained_frozen_encoder",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "model_id": "vinai/PhoWhisper-base",
+  "published_parameter_count": 74000000,
+  "published_repository_size_mb": 294,
+  "published_weights_size_mb": 290,
+  "model_size_mb": 79.08485794067383,
+  "device": "mps",
+  "requested_device": "mps",
+  "seed": 42,
+  "parameter_counts": {
+    "total": 20722691,
+    "trainable": 132099
+  },
+  "feature": {
+    "name": "PhoWhisper/Whisper input_features",
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "input_shape": [
+      80,
+      3000
+    ]
+  },
+  "training": {
+    "mode": "frozen_encoder",
+    "batch_size": 2,
+    "max_epochs": 20,
+    "epochs_completed": 13,
+    "patience": 5,
+    "learning_rate": 0.001,
+    "weight_decay": 0.01,
+    "training_log_path": "outputs/metrics/phowhisper_pretrained_training_log.csv"
+  },
+  "split_counts": {
+    "train": 300,
+    "valid": 45,
+    "test": 45
+  },
+  "best_epoch": 8,
+  "best_valid_macro_f1": 0.6720142602495544,
+  "checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_seconds_per_sample": 0.06394942502956838
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.13072212596540947,
+      "accuracy": 0.9433333333333334,
+      "macro_f1": 0.9427920443405576,
+      "per_class_f1": {
+        "Northern": 0.9252336448598131,
+        "Central": 0.9900990099009901,
+        "Southern": 0.9130434782608695
+      }
+    },
+    "valid": {
+      "loss": 1.0788613549588868,
+      "accuracy": 0.6888888888888889,
+      "macro_f1": 0.6720142602495544,
+      "per_class_f1": {
+        "Northern": 0.8823529411764706,
+        "Central": 0.5454545454545454,
+        "Southern": 0.5882352941176471
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_pretrained_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.8315756852479859,
+      "accuracy": 0.8,
+      "macro_f1": 0.7972350230414748,
+      "per_class_f1": {
+        "Northern": 0.967741935483871,
+        "Central": 0.7142857142857143,
+        "Southern": 0.7096774193548387
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_pretrained_test_confusion_matrix.csv",
+      "predictions_path": "outputs/metrics/phowhisper_pretrained_test_predictions.csv"
+    }
+  }
+}

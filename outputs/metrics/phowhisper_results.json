@@ -1,5 +1,5 @@
 {
-  "phase": "phase6_phowhisper_base",
+  "phase": "phase6_phowhisper_fine_tuned",
   "metadata_path": "data/processed/preprocessed_metadata.csv",
   "label_order": [
     "Northern",

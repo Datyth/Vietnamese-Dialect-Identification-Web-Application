@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import http.client
 import io
-import itertools
 import json
 import random
 import re
@@ -218,35 +218,96 @@ def download_file(
     expected_bytes: int,
     data_root: Path,
     max_data_bytes: int,
+    attempts: int = 5,
 ) -> int:
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    written = 0
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            with temporary.open("wb") as output:
-                while chunk := response.read(1024 * 1024):
-                    written += len(chunk)
-                    if written > expected_bytes:
-                        raise ValueError(
-                            f"Download exceeded declared size for {destination.name}."
+    for attempt in range(1, attempts + 1):
+        existing_bytes = temporary.stat().st_size if temporary.exists() else 0
+        if existing_bytes > expected_bytes:
+            temporary.unlink()
+            existing_bytes = 0
+        if existing_bytes == expected_bytes:
+            temporary.replace(destination)
+            return expected_bytes
+
+        headers = {"User-Agent": USER_AGENT}
+        if existing_bytes:
+            headers["Range"] = f"bytes={existing_bytes}-"
+        request = urllib.request.Request(url, headers=headers)
+
+        try:
+            with urllib.request.urlopen(request, timeout=180) as response:
+                status = getattr(response, "status", None)
+                if status is None:
+                    status = response.getcode()
+                append = existing_bytes > 0 and status == 206
+                if append:
+                    content_range = response.headers.get("Content-Range", "")
+                    if not content_range.startswith(f"bytes {existing_bytes}-"):
+                        temporary.unlink(missing_ok=True)
+                        raise OSError(
+                            f"Invalid Content-Range while resuming {destination.name}: "
+                            f"{content_range!r}."
                         )
-                    if tree_size_bytes(data_root) + len(chunk) > max_data_bytes:
-                        raise ValueError(
-                            f"Download would exceed {max_data_bytes:,} data bytes."
-                        )
-                    output.write(chunk)
-        if written != expected_bytes:
-            raise ValueError(
-                f"Download size mismatch for {destination.name}: "
-                f"expected {expected_bytes}, received {written}."
+                elif existing_bytes:
+                    existing_bytes = 0
+
+                written = existing_bytes
+                mode = "ab" if append else "wb"
+                with temporary.open(mode) as output:
+                    while chunk := response.read(1024 * 1024):
+                        written += len(chunk)
+                        if written > expected_bytes:
+                            temporary.unlink(missing_ok=True)
+                            raise ValueError(
+                                f"Download exceeded declared size for "
+                                f"{destination.name}."
+                            )
+                        if tree_size_bytes(data_root) + len(chunk) > max_data_bytes:
+                            raise ValueError(
+                                f"Download would exceed {max_data_bytes:,} "
+                                "data bytes."
+                            )
+                        output.write(chunk)
+        except (
+            ConnectionError,
+            http.client.IncompleteRead,
+            OSError,
+            TimeoutError,
+            urllib.error.URLError,
+        ) as exc:
+            if attempt == attempts:
+                partial_bytes = temporary.stat().st_size if temporary.exists() else 0
+                raise RuntimeError(
+                    f"Failed to download {destination.name} after {attempts} "
+                    f"attempts; preserved {partial_bytes:,} partial bytes."
+                ) from exc
+            partial_bytes = temporary.stat().st_size if temporary.exists() else 0
+            print(
+                f"Download interrupted for {destination.name}; retrying from "
+                f"{partial_bytes:,} bytes (attempt {attempt + 1}/{attempts})..."
             )
-        temporary.replace(destination)
-    except (OSError, ValueError):
-        temporary.unlink(missing_ok=True)
-        raise
-    return written
+            time.sleep(min(2 ** (attempt - 1), 15))
+            continue
+
+        if written == expected_bytes:
+            temporary.replace(destination)
+            return written
+        if attempt == attempts:
+            raise RuntimeError(
+                f"Download size mismatch for {destination.name} after {attempts} "
+                f"attempts: expected {expected_bytes}, received {written}. "
+                "The partial file was preserved for the next run."
+            )
+        print(
+            f"Download ended early for {destination.name}: expected "
+            f"{expected_bytes:,}, received {written:,}; resuming "
+            f"(attempt {attempt + 1}/{attempts})..."
+        )
+        time.sleep(min(2 ** (attempt - 1), 15))
+
+    raise AssertionError("unreachable")
 
 
 def tree_size_bytes(root: Path) -> int:
@@ -260,7 +321,7 @@ def choose_source_shards(
     source_files: dict[str, list[dict[str, Any]]],
     targets: dict[str, int],
 ) -> list[dict[str, Any]]:
-    """Greedily choose small shards that cover every split/label target."""
+    """Greedily choose enough compact shards to cover every requested target."""
     counts: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     for row in metadata:
         counts[(row["source_split"], row["source_parquet_file"])][
@@ -281,33 +342,50 @@ def choose_source_shards(
                 }
             )
 
-        best_combination: tuple[dict[str, Any], ...] | None = None
-        best_size: int | None = None
-        for shard_count in range(1, 4):
-            for combination in itertools.combinations(candidates, shard_count):
-                if not all(
-                    sum(item["counts"][label] for item in combination)
-                    >= targets[split]
+        remaining = {label: targets[split] for label in LABELS}
+        split_selected: list[dict[str, Any]] = []
+        while any(remaining.values()):
+            scored: list[tuple[float, int, int, str, dict[str, Any]]] = []
+            for candidate in candidates:
+                useful_count = sum(
+                    min(remaining[label], candidate["counts"][label])
                     for label in LABELS
-                ):
+                )
+                if useful_count <= 0:
                     continue
-                total_size = sum(item["size"] for item in combination)
-                if best_size is None or total_size < best_size:
-                    best_combination = combination
-                    best_size = total_size
-            if best_combination is not None:
-                break
+                size = max(int(candidate["size"]), 1)
+                scored.append(
+                    (
+                        useful_count / size,
+                        useful_count,
+                        size,
+                        candidate["filename"],
+                        candidate,
+                    )
+                )
 
-        if best_combination is None:
-            raise RuntimeError(
-                f"Cannot cover requested {split} targets with three shards."
+            if not scored:
+                missing = {
+                    label: count for label, count in remaining.items() if count > 0
+                }
+                raise RuntimeError(
+                    f"Cannot cover requested {split} targets from available shards; "
+                    f"remaining samples: {missing}."
+                )
+
+            _ratio, _useful, _size, _filename, chosen = min(
+                scored,
+                key=lambda item: (-item[0], -item[1], item[2], item[3]),
             )
-        selected.extend(
-            sorted(
-                best_combination,
-                key=lambda item: (-item["size"], item["filename"]),
-            )
-        )
+            split_selected.append(chosen)
+            candidates.remove(chosen)
+            for label in LABELS:
+                remaining[label] = max(
+                    0,
+                    remaining[label] - chosen["counts"][label],
+                )
+
+        selected.extend(split_selected)
     return selected
 
 
@@ -492,6 +570,7 @@ def acquire_audio_subset(
     temporary_root.mkdir(parents=True, exist_ok=True)
     connection = duckdb.connect()
     connection.execute("SET enable_progress_bar = false")
+    completed = False
     try:
         for shard in selected_shards:
             split = shard["split"]
@@ -502,9 +581,20 @@ def acquire_audio_subset(
             if not any(needed.values()):
                 continue
 
+            local_shard = temporary_root / shard["filename"]
+            partial_shard = local_shard.with_suffix(local_shard.suffix + ".part")
+            existing_temporary_bytes = 0
+            if local_shard.exists():
+                existing_temporary_bytes = local_shard.stat().st_size
+            elif partial_shard.exists():
+                existing_temporary_bytes = partial_shard.stat().st_size
+            additional_temporary_bytes = max(
+                0,
+                int(shard["size"]) - existing_temporary_bytes,
+            )
             if (
                 tree_size_bytes(data_root)
-                + shard["size"]
+                + additional_temporary_bytes
                 + METADATA_RESERVE_BYTES
                 > max_data_bytes
             ):
@@ -513,7 +603,6 @@ def acquire_audio_subset(
                     f"{max_data_bytes:,}-byte data cap."
                 )
 
-            local_shard = temporary_root / shard["filename"]
             if not local_shard.exists():
                 print(
                     f"Downloading {shard['filename']} "
@@ -637,9 +726,15 @@ def acquire_audio_subset(
                     for label in LABELS
                 )
             )
+        completed = True
     finally:
         connection.close()
-        shutil.rmtree(temporary_root, ignore_errors=True)
+        if completed:
+            shutil.rmtree(temporary_root, ignore_errors=True)
+        elif temporary_root.exists():
+            print(
+                f"Preserved partial downloads under {temporary_root} for resume."
+            )
 
     missing_targets = {
         f"{split}:{label}": targets[split] - selected_counts[(split, label)]

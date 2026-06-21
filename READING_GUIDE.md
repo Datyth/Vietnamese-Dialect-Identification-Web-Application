@@ -34,7 +34,7 @@ Theo `PLAN.md`, repo đã có các phần chính sau:
 | Phase 3: Data EDA | Đã có báo cáo kiểm tra tối thiểu. |
 | Phase 4: MFCC baselines | Đã train Logistic Regression và SVM. |
 | Phase 5: Lightweight CNN | Đã có log-Mel feature, CNN nhỏ và script train PyTorch. |
-| Phase 6: PhoWhisper-base | Đã fine-tune PhoWhisper-base cho 3-class classification. |
+| Phase 6: PhoWhisper-base | Đã chạy frozen encoder và full fine-tuning cho 3-class classification. |
 | Phase 7: Final evaluation | Đã tổng hợp metrics và error analysis. |
 | Phase 8+ | Chưa có inference hoặc web app. |
 
@@ -58,7 +58,7 @@ ViMD Parquet shards
   -> data/processed/preprocessed_metadata.csv
   -> MFCC mean/std features -> Logistic Regression + SVM
   -> log-Mel spectrograms -> lightweight CNN
-  -> PhoWhisper input_features -> PhoWhisper-base classifier
+  -> PhoWhisper input_features -> frozen encoder hoặc full fine-tuning
   -> final comparison + error analysis
   -> outputs/metrics/, outputs/models/, outputs/reports/
 ```
@@ -73,7 +73,7 @@ Nói ngắn gọn:
 4. `logmel.py` biến waveform thành log-Mel spectrogram cho CNN.
 5. `train_baseline.py` train Logistic Regression và SVM.
 6. `train_cnn.py` train lightweight CNN bằng PyTorch.
-7. `train_phowhisper.py` fine-tune PhoWhisper-base bằng Transformers.
+7. `train_phowhisper.py` chạy frozen encoder hoặc fine-tune PhoWhisper-base.
 8. `final_evaluation.py` tổng hợp metrics và sinh error analysis.
 9. Các kết quả được ghi vào `outputs/` và tóm tắt trong `reports/`.
 
@@ -274,24 +274,28 @@ Run hiện tại chọn `cpu` vì PyTorch trong môi trường này báo `mps=Fa
 Các file chính:
 
 - `src/training/train_phowhisper.py`
+- `outputs/metrics/phowhisper_pretrained_results.json`
 - `outputs/metrics/phowhisper_results.json`
+- `outputs/reports/phase6_phowhisper_pretrained_report.md`
 - `outputs/reports/phase6_phowhisper_report.md`
 
 PhoWhisper-base là model pretrained lớn hơn CNN nhiều: khoảng 74M parameters và
 published PyTorch weights khoảng 290 MB. Script dùng
-`WhisperForAudioClassification` để fine-tune cho 3 nhãn dialect, không dùng ASR
-generation.
+`WhisperForAudioClassification` theo hai chế độ: đóng băng encoder và chỉ train
+classification stack, hoặc fine-tune toàn bộ encoder/classification stack.
+Model ASR gốc không có output head cho ba vùng nên frozen baseline không phải
+zero-shot hoàn toàn.
 
-Run hiện tại:
+Kết quả hiện tại:
 
-| Split | Accuracy | Macro F1 |
-| --- | ---: | ---: |
-| train | 0.9933 | 0.9933 |
-| valid | 0.6667 | 0.6623 |
-| test | 0.7111 | 0.7113 |
+| Model | Valid Macro F1 | Test Macro F1 | Device |
+| --- | ---: | ---: | --- |
+| Pretrained frozen encoder | 0.6720 | 0.7972 | MPS |
+| Full fine-tuning | 0.6623 | 0.7113 | MPS |
 
 Script chọn device theo thứ tự `mps`, `cuda`, rồi `cpu` khi dùng `--device auto`.
-Run hiện tại dùng `mps`, early-stopped ở epoch 6 và chọn best epoch 3.
+Frozen run dùng `mps`, early-stopped ở epoch 13 và chọn best epoch 8. Encoder đã
+được kiểm tra không thay đổi so với pretrained checkpoint.
 
 ### Bước 9: Đọc Phase 7 final evaluation
 
@@ -301,9 +305,11 @@ File chính:
 - `outputs/metrics/final_comparison.csv`
 - `outputs/metrics/final_sample_errors.csv`
 - `outputs/reports/error_analysis.md`
+- `outputs/reports/neural_model_comparison.md`
 
 Phase 7 chọn best model theo validation macro F1. Hiện tại best model vẫn là
-Phase 4 SVM, dù PhoWhisper-base có test macro F1 cao nhất.
+Phase 4 SVM. Frozen-encoder PhoWhisper có test macro F1 cao nhất nhưng test set
+không được dùng để chọn model.
 
 ### Bước 10: Đọc tests
 
@@ -376,10 +382,19 @@ Chọn device rõ ràng nếu cần:
 .venv/bin/python -m src.training.train_cnn --overwrite --device cpu
 ```
 
-Fine-tune PhoWhisper-base:
+Chạy PhoWhisper-base với frozen encoder:
 
 ```bash
-.venv/bin/python -m src.training.train_phowhisper --overwrite --device auto
+.venv/bin/python -m src.training.train_phowhisper \
+  --training-mode frozen_encoder --learning-rate 1e-3 \
+  --max-epochs 20 --patience 5 --overwrite --device auto
+```
+
+Fine-tune toàn bộ PhoWhisper-base:
+
+```bash
+.venv/bin/python -m src.training.train_phowhisper \
+  --training-mode full_fine_tune --overwrite --device auto
 ```
 
 Tạo final comparison và error analysis:
@@ -426,6 +441,7 @@ Nếu bạn chỉ có ít thời gian, hãy đọc theo checklist này:
    `extract_input_features`, `train_one_epoch`, `evaluate_model` và `main`.
 10. Đọc `src/evaluation/final_evaluation.py`.
 11. Mở `outputs/metrics/baseline_results.json`, `outputs/metrics/cnn_results.json`,
+   `outputs/metrics/phowhisper_pretrained_results.json`,
    `outputs/metrics/phowhisper_results.json` và
    `outputs/metrics/final_comparison.csv` để xem metric cuối cùng.
 

@@ -7,7 +7,8 @@ Best model by validation macro F1: `svm`.
 | logistic_regression | 0.5981 | 0.6292 |
 | svm | 0.6918 | 0.6264 |
 | lightweight_cnn | 0.4339 | 0.6668 |
-| phowhisper_base | 0.6623 | 0.7113 |
+| phowhisper_pretrained_frozen_encoder | 0.6720 | 0.7972 |
+| phowhisper_fine_tuned | 0.6623 | 0.7113 |
 
 ## Test Error Summary
 

@@ -1,9 +1,12 @@
+import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.data.prepare_metadata import (
     choose_source_shards,
+    download_file,
     normalize_source_row,
     select_rows_for_label,
     tree_size_bytes,
@@ -11,6 +14,50 @@ from src.data.prepare_metadata import (
 
 
 class PrepareMetadataTests(unittest.TestCase):
+    def test_download_file_resumes_truncated_response(self):
+        class FakeResponse:
+            def __init__(self, data, status, headers=None):
+                self.stream = io.BytesIO(data)
+                self.status = status
+                self.headers = headers or {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, size):
+                return self.stream.read(size)
+
+        responses = [
+            FakeResponse(b"abcdef", 200),
+            FakeResponse(
+                b"ghij",
+                206,
+                {"Content-Range": "bytes 6-9/10"},
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "sample.parquet"
+            with patch(
+                "src.data.prepare_metadata.urllib.request.urlopen",
+                side_effect=responses,
+            ) as urlopen, patch("src.data.prepare_metadata.time.sleep"):
+                written = download_file(
+                    "https://example.invalid/sample.parquet",
+                    destination,
+                    expected_bytes=10,
+                    data_root=root,
+                    max_data_bytes=100,
+                )
+
+            resumed_request = urlopen.call_args_list[1].args[0]
+            self.assertEqual(resumed_request.get_header("Range"), "bytes=6-")
+            self.assertEqual(written, 10)
+            self.assertEqual(destination.read_bytes(), b"abcdefghij")
+
     def test_normalize_source_row_maps_region_and_gender(self):
         row = normalize_source_row(
             {
@@ -119,6 +166,44 @@ class PrepareMetadataTests(unittest.TestCase):
                 "valid-mixed.parquet",
                 "test-mixed.parquet",
             ],
+        )
+
+    def test_choose_source_shards_can_select_more_than_three_per_split(self):
+        metadata = []
+        source_files = {split: [] for split in ("train", "valid", "test")}
+        for split in source_files:
+            for shard_index in range(4):
+                filename = f"{split}-{shard_index}.parquet"
+                source_files[split].append(
+                    {
+                        "path": f"data/{filename}",
+                        "url": f"https://example.invalid/{filename}",
+                        "size": 100 + shard_index,
+                    }
+                )
+                for label in ("Northern", "Central", "Southern"):
+                    metadata.append(
+                        {
+                            "source_split": split,
+                            "label": label,
+                            "source_parquet_file": filename,
+                            "filename": f"{label}-{shard_index}.wav",
+                        }
+                    )
+
+        selected = choose_source_shards(
+            metadata,
+            source_files,
+            {"train": 4, "valid": 4, "test": 4},
+        )
+
+        self.assertEqual(len(selected), 12)
+        self.assertEqual(
+            {
+                split: sum(item["split"] == split for item in selected)
+                for split in source_files
+            },
+            {"train": 4, "valid": 4, "test": 4},
         )
 
     def test_tree_size_bytes_counts_nested_files(self):

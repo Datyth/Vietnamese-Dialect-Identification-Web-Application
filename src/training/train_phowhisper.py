@@ -1,4 +1,4 @@
-"""Fine-tune PhoWhisper-base for three-region dialect classification."""
+"""Train frozen-encoder and fine-tuned PhoWhisper dialect classifiers."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ LABELS = ("Northern", "Central", "Southern")
 LABEL_TO_INDEX = {label: index for index, label in enumerate(LABELS)}
 SPLITS = ("train", "valid", "test")
 DEFAULT_MODEL_ID = "vinai/PhoWhisper-base"
+TRAINING_MODES = ("frozen_encoder", "full_fine_tune")
+DEFAULT_TRAINING_MODE = "full_fine_tune"
 DEFAULT_SEED = 42
 DEFAULT_BATCH_SIZE = 2
 DEFAULT_MAX_EPOCHS = 8
@@ -37,7 +39,7 @@ def require_torch() -> Any:
         import torch
     except ImportError as exc:
         raise RuntimeError(
-            "PyTorch is required for PhoWhisper fine-tuning. "
+            "PyTorch is required for PhoWhisper training. "
             "Install dependencies with: uv pip install --python .venv/bin/python "
             "-r requirements.txt"
         ) from exc
@@ -49,7 +51,7 @@ def require_transformers() -> tuple[Any, Any]:
         from transformers import AutoFeatureExtractor, WhisperForAudioClassification
     except ImportError as exc:
         raise RuntimeError(
-            "transformers is required for PhoWhisper fine-tuning. "
+            "transformers is required for PhoWhisper training. "
             "Install dependencies with: uv pip install --python .venv/bin/python "
             "-r requirements.txt"
         ) from exc
@@ -212,9 +214,12 @@ def train_one_epoch(
     loader: Any,
     optimizer: Any,
     device: Any,
+    freeze_encoder: bool = False,
 ) -> dict[str, float]:
     torch = require_torch()
     model.train()
+    if freeze_encoder:
+        model.encoder.eval()
     total_loss = 0.0
     total_correct = 0
     total_count = 0
@@ -325,7 +330,66 @@ def checkpoint_state(
         "target_samples": TARGET_SAMPLES,
         "device": str(device),
         "seed": args.seed,
+        "training_mode": args.training_mode,
     }
+
+
+def configure_trainable_parameters(model: Any, training_mode: str) -> dict[str, int]:
+    if training_mode not in TRAINING_MODES:
+        raise ValueError(f"training_mode must be one of: {', '.join(TRAINING_MODES)}.")
+    if training_mode == "frozen_encoder":
+        for parameter in model.encoder.parameters():
+            parameter.requires_grad = False
+    total = sum(parameter.numel() for parameter in model.parameters())
+    trainable = sum(
+        parameter.numel() for parameter in model.parameters() if parameter.requires_grad
+    )
+    return {"total": total, "trainable": trainable}
+
+
+def apply_mode_output_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    if args.training_mode == "frozen_encoder":
+        defaults = {
+            "checkpoint_path": Path(
+                "outputs/models/phowhisper_pretrained_frozen_encoder.pt"
+            ),
+            "metrics_path": Path("outputs/metrics/phowhisper_pretrained_results.json"),
+            "training_log_path": Path(
+                "outputs/metrics/phowhisper_pretrained_training_log.csv"
+            ),
+            "predictions_path": Path(
+                "outputs/metrics/phowhisper_pretrained_test_predictions.csv"
+            ),
+            "report_path": Path(
+                "outputs/reports/phase6_phowhisper_pretrained_report.md"
+            ),
+            "valid_confusion_path": Path(
+                "outputs/metrics/phowhisper_pretrained_valid_confusion_matrix.csv"
+            ),
+            "test_confusion_path": Path(
+                "outputs/metrics/phowhisper_pretrained_test_confusion_matrix.csv"
+            ),
+        }
+    else:
+        defaults = {
+            "checkpoint_path": Path("outputs/models/phowhisper_dialect.pt"),
+            "metrics_path": Path("outputs/metrics/phowhisper_results.json"),
+            "training_log_path": Path("outputs/metrics/phowhisper_training_log.csv"),
+            "predictions_path": Path(
+                "outputs/metrics/phowhisper_test_predictions.csv"
+            ),
+            "report_path": Path("outputs/reports/phase6_phowhisper_report.md"),
+            "valid_confusion_path": Path(
+                "outputs/metrics/phowhisper_valid_confusion_matrix.csv"
+            ),
+            "test_confusion_path": Path(
+                "outputs/metrics/phowhisper_test_confusion_matrix.csv"
+            ),
+        }
+    for name, path in defaults.items():
+        if getattr(args, name) is None:
+            setattr(args, name, path)
+    return args
 
 
 def write_training_log(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -389,11 +453,23 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def write_report(path: Path, results: dict[str, Any]) -> None:
+    training_mode = results["training"]["mode"]
+    if training_mode == "frozen_encoder":
+        title = "# Phase 6 PhoWhisper-base Pretrained Encoder Report"
+        summary = (
+            "PhoWhisper-base was evaluated as a pretrained frozen-encoder "
+            "baseline. Only the projector and 3-class classifier head were trained."
+        )
+    else:
+        title = "# Phase 6 PhoWhisper-base Fine-Tuning Report"
+        summary = (
+            "PhoWhisper-base was fine-tuned end-to-end for 3-class dialect "
+            "classification using preprocessed 16 kHz / 16 s audio."
+        )
     lines = [
-        "# Phase 6 PhoWhisper-base Report",
+        title,
         "",
-        "PhoWhisper-base was fine-tuned end-to-end for 3-class dialect "
-        "classification using preprocessed 16 kHz / 16 s audio.",
+        summary,
         "",
         "| Split | Accuracy | Macro F1 | Loss |",
         "| --- | ---: | ---: | ---: |",
@@ -409,6 +485,9 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
             "",
             f"Best epoch by validation macro F1: {results['best_epoch']}.",
             f"Training device: `{results['device']}`.",
+            f"Training mode: `{training_mode}`.",
+            f"Trainable parameters: {results['parameter_counts']['trainable']:,} "
+            f"of {results['parameter_counts']['total']:,}.",
             f"Checkpoint: `{results['checkpoint_path']}`.",
             "",
             "## Model Size",
@@ -468,7 +547,7 @@ def synchronize_device(torch: Any, device: Any) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fine-tune PhoWhisper-base for dialect classification."
+        description="Train PhoWhisper-base for dialect classification."
     )
     parser.add_argument(
         "--metadata-path",
@@ -477,6 +556,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument(
+        "--training-mode",
+        choices=TRAINING_MODES,
+        default=DEFAULT_TRAINING_MODE,
+        help=(
+            "frozen_encoder trains only the classification stack; "
+            "full_fine_tune updates the encoder and classification stack."
+        ),
+    )
+    parser.add_argument(
         "--cache-dir",
         type=Path,
         default=Path("outputs/models/hf_cache"),
@@ -484,28 +572,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-path",
         type=Path,
-        default=Path("outputs/models/phowhisper_dialect.pt"),
+        default=None,
     )
     parser.add_argument(
         "--metrics-path",
         type=Path,
-        default=Path("outputs/metrics/phowhisper_results.json"),
+        default=None,
     )
     parser.add_argument(
         "--training-log-path",
         type=Path,
-        default=Path("outputs/metrics/phowhisper_training_log.csv"),
+        default=None,
     )
     parser.add_argument(
         "--predictions-path",
         type=Path,
-        default=Path("outputs/metrics/phowhisper_test_predictions.csv"),
+        default=None,
     )
     parser.add_argument(
         "--report-path",
         type=Path,
-        default=Path("outputs/reports/phase6_phowhisper_report.md"),
+        default=None,
     )
+    parser.add_argument("--valid-confusion-path", type=Path, default=None)
+    parser.add_argument("--test-confusion-path", type=Path, default=None)
     parser.add_argument("--device", choices=("auto", "mps", "cuda", "cpu"), default="auto")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
@@ -519,15 +609,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    args = parse_args()
+    args = apply_mode_output_defaults(parse_args())
     output_paths = [
         args.checkpoint_path,
         args.metrics_path,
         args.training_log_path,
         args.predictions_path,
         args.report_path,
-        Path("outputs/metrics/phowhisper_valid_confusion_matrix.csv"),
-        Path("outputs/metrics/phowhisper_test_confusion_matrix.csv"),
+        args.valid_confusion_path,
+        args.test_confusion_path,
     ]
     if not args.overwrite:
         ensure_outputs_absent(output_paths)
@@ -557,6 +647,12 @@ def main() -> None:
         ignore_mismatched_sizes=True,
         cache_dir=args.cache_dir,
     ).to(device)
+    parameter_counts = configure_trainable_parameters(model, args.training_mode)
+    print(
+        f"Training mode: {args.training_mode}; trainable parameters: "
+        f"{parameter_counts['trainable']:,}/{parameter_counts['total']:,}",
+        flush=True,
+    )
 
     rows = read_preprocessed_metadata(args.metadata_path)
     rows_by_split = split_rows(rows)
@@ -580,7 +676,7 @@ def main() -> None:
     }
 
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [parameter for parameter in model.parameters() if parameter.requires_grad],
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
@@ -593,7 +689,13 @@ def main() -> None:
 
     for epoch in range(1, args.max_epochs + 1):
         started = time.perf_counter()
-        train_metrics = train_one_epoch(model, loaders["train"], optimizer, device)
+        train_metrics = train_one_epoch(
+            model,
+            loaders["train"],
+            optimizer,
+            device,
+            freeze_encoder=args.training_mode == "frozen_encoder",
+        )
         valid_metrics, _matrix, _true, _pred, _conf = evaluate_model(
             model,
             loaders["valid"],
@@ -655,8 +757,8 @@ def main() -> None:
         final_matrices[split] = matrix
         final_predictions[split] = (true_labels, predictions, confidences)
 
-    valid_matrix_path = Path("outputs/metrics/phowhisper_valid_confusion_matrix.csv")
-    test_matrix_path = Path("outputs/metrics/phowhisper_test_confusion_matrix.csv")
+    valid_matrix_path = args.valid_confusion_path
+    test_matrix_path = args.test_confusion_path
     write_confusion_matrix(valid_matrix_path, final_matrices["valid"])
     write_confusion_matrix(test_matrix_path, final_matrices["test"])
     write_training_log(args.training_log_path, training_rows)
@@ -681,7 +783,11 @@ def main() -> None:
         else 0.0
     )
     results = {
-        "phase": "phase6_phowhisper_base",
+        "phase": (
+            "phase6_phowhisper_pretrained_frozen_encoder"
+            if args.training_mode == "frozen_encoder"
+            else "phase6_phowhisper_fine_tuned"
+        ),
         "metadata_path": args.metadata_path.as_posix(),
         "label_order": list(LABELS),
         "model_id": args.model_id,
@@ -692,6 +798,7 @@ def main() -> None:
         "device": str(device),
         "requested_device": args.device,
         "seed": args.seed,
+        "parameter_counts": parameter_counts,
         "feature": {
             "name": "PhoWhisper/Whisper input_features",
             "sample_rate": TARGET_SAMPLE_RATE,
@@ -699,7 +806,7 @@ def main() -> None:
             "input_shape": feature_shape,
         },
         "training": {
-            "mode": "full_fine_tune",
+            "mode": args.training_mode,
             "batch_size": args.batch_size,
             "max_epochs": args.max_epochs,
             "epochs_completed": len(training_rows),

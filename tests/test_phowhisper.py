@@ -1,8 +1,12 @@
 import unittest
+from argparse import Namespace
+from pathlib import Path
 
 import torch
 
 from src.training.train_phowhisper import (
+    apply_mode_output_defaults,
+    configure_trainable_parameters,
     is_mps_available,
     resolve_device,
     split_rows,
@@ -53,6 +57,44 @@ class PhoWhisperMetadataTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Unsupported label"):
             split_rows(rows)
+
+
+class PhoWhisperTrainingModeTests(unittest.TestCase):
+    def test_frozen_encoder_leaves_only_classification_stack_trainable(self):
+        class TinyAudioClassifier(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.encoder = torch.nn.Linear(4, 4)
+                self.projector = torch.nn.Linear(4, 2)
+                self.classifier = torch.nn.Linear(2, 3)
+
+        model = TinyAudioClassifier()
+        counts = configure_trainable_parameters(model, "frozen_encoder")
+
+        self.assertTrue(all(not p.requires_grad for p in model.encoder.parameters()))
+        self.assertTrue(all(p.requires_grad for p in model.projector.parameters()))
+        self.assertTrue(all(p.requires_grad for p in model.classifier.parameters()))
+        self.assertLess(counts["trainable"], counts["total"])
+
+    def test_frozen_mode_uses_separate_output_paths(self):
+        args = Namespace(
+            training_mode="frozen_encoder",
+            checkpoint_path=None,
+            metrics_path=None,
+            training_log_path=None,
+            predictions_path=None,
+            report_path=None,
+            valid_confusion_path=None,
+            test_confusion_path=None,
+        )
+
+        resolved = apply_mode_output_defaults(args)
+
+        self.assertEqual(
+            resolved.metrics_path,
+            Path("outputs/metrics/phowhisper_pretrained_results.json"),
+        )
+        self.assertIn("frozen_encoder", resolved.checkpoint_path.name)
 
 
 if __name__ == "__main__":

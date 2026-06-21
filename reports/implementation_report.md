@@ -1,5 +1,62 @@
 # Implementation Report
 
+## Latest Update: Configurable Training Parameters
+
+### Task Summary
+
+Added explicit, centralized training hyperparameters to `scripts/train.sh` for
+the MFCC baseline seed, lightweight CNN, frozen PhoWhisper classifier, and full
+PhoWhisper fine-tuning. Every value can be overridden through an environment
+variable, and each run prints the resolved values before training starts.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `scripts/train.sh` | Centralizes and forwards seed, batch size, epochs, patience, learning rate, and weight decay. |
+| `reports/implementation_report.md` | Records the implementation and verification. |
+
+### Scope And Decisions
+
+- Preserved all previous training defaults and the existing phase order.
+- Used environment variables instead of adding a large set of shell CLI flags.
+- Passed the shared seed explicitly to all three training modules.
+- Kept separate PhoWhisper parameters for frozen-encoder and full-fine-tune
+  experiments because their learning rates and epoch budgets differ.
+
+### Commands Run
+
+```bash
+bash -n scripts/train.sh
+scripts/train.sh --help
+env PYTHON_BIN=/bin/echo scripts/train.sh --device mps --overwrite
+env PYTHON_BIN=/bin/echo CNN_LEARNING_RATE=5e-4 CNN_PATIENCE=10 scripts/train.sh --device mps --overwrite
+git diff --check -- scripts/train.sh reports/implementation_report.md
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Bash syntax | Passed. |
+| Help output | Lists every training parameter and default. |
+| Default dry run | All parameters were forwarded to the intended training commands. |
+| Override dry run | CNN learning rate `5e-4` and patience `10` were resolved and forwarded. |
+
+### Known Limitations
+
+- Full model training was not repeated because this change only forwards
+  existing CLI options and a complete run is compute-intensive.
+- Invalid numeric values are rejected by the existing Python training CLIs when
+  their phase starts rather than by the shell script.
+
+### Reviewer Priorities
+
+1. Confirm experiment-specific defaults before starting a long training run.
+2. Keep the printed parameter block with saved logs for reproducibility.
+
+---
+
 ## Latest Update: Browser Audio Playback
 
 ### Task Summary

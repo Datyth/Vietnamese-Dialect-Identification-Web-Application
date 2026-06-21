@@ -21,6 +21,24 @@ Options:
 Environment:
   PYTHON_BIN   Python executable to use (default: .venv/bin/python).
 
+Training parameters can be overridden with environment variables:
+  TRAINING_SEED                         default: 42
+  CNN_BATCH_SIZE                        default: 16
+  CNN_MAX_EPOCHS                        default: 40
+  CNN_PATIENCE                          default: 8
+  CNN_LEARNING_RATE                     default: 1e-3
+  CNN_WEIGHT_DECAY                      default: 1e-4
+  PHOWHISPER_FROZEN_BATCH_SIZE          default: 2
+  PHOWHISPER_FROZEN_MAX_EPOCHS          default: 20
+  PHOWHISPER_FROZEN_PATIENCE            default: 5
+  PHOWHISPER_FROZEN_LEARNING_RATE       default: 1e-3
+  PHOWHISPER_FROZEN_WEIGHT_DECAY        default: 0.01
+  PHOWHISPER_FINE_TUNE_BATCH_SIZE       default: 2
+  PHOWHISPER_FINE_TUNE_MAX_EPOCHS       default: 8
+  PHOWHISPER_FINE_TUNE_PATIENCE         default: 3
+  PHOWHISPER_FINE_TUNE_LEARNING_RATE    default: 1e-5
+  PHOWHISPER_FINE_TUNE_WEIGHT_DECAY     default: 0.01
+
 For an already-downloaded PhoWhisper cache, offline execution can be requested:
   HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 scripts/train.sh --overwrite
 EOF
@@ -28,6 +46,29 @@ EOF
 
 DEVICE="auto"
 OVERWRITE_ARGS=()
+
+# Keep training hyperparameters in one place. Environment overrides make
+# experiments configurable without changing this script.
+TRAINING_SEED="${TRAINING_SEED:-42}"
+
+CNN_BATCH_SIZE="${CNN_BATCH_SIZE:-16}"
+CNN_MAX_EPOCHS="${CNN_MAX_EPOCHS:-40}"
+CNN_PATIENCE="${CNN_PATIENCE:-8}"
+CNN_LEARNING_RATE="${CNN_LEARNING_RATE:-1e-3}"
+CNN_WEIGHT_DECAY="${CNN_WEIGHT_DECAY:-1e-4}"
+
+PHOWHISPER_FROZEN_BATCH_SIZE="${PHOWHISPER_FROZEN_BATCH_SIZE:-2}"
+PHOWHISPER_FROZEN_MAX_EPOCHS="${PHOWHISPER_FROZEN_MAX_EPOCHS:-20}"
+PHOWHISPER_FROZEN_PATIENCE="${PHOWHISPER_FROZEN_PATIENCE:-5}"
+PHOWHISPER_FROZEN_LEARNING_RATE="${PHOWHISPER_FROZEN_LEARNING_RATE:-1e-3}"
+PHOWHISPER_FROZEN_WEIGHT_DECAY="${PHOWHISPER_FROZEN_WEIGHT_DECAY:-0.01}"
+
+PHOWHISPER_FINE_TUNE_BATCH_SIZE="${PHOWHISPER_FINE_TUNE_BATCH_SIZE:-2}"
+PHOWHISPER_FINE_TUNE_MAX_EPOCHS="${PHOWHISPER_FINE_TUNE_MAX_EPOCHS:-8}"
+PHOWHISPER_FINE_TUNE_PATIENCE="${PHOWHISPER_FINE_TUNE_PATIENCE:-3}"
+PHOWHISPER_FINE_TUNE_LEARNING_RATE="${PHOWHISPER_FINE_TUNE_LEARNING_RATE:-1e-5}"
+PHOWHISPER_FINE_TUNE_WEIGHT_DECAY="${PHOWHISPER_FINE_TUNE_WEIGHT_DECAY:-0.01}"
+
 while (($# > 0)); do
   case "$1" in
     --device)
@@ -88,23 +129,41 @@ run_step() {
   "$@"
 }
 
+echo "Training parameters:"
+echo "  seed=${TRAINING_SEED}"
+echo "  cnn: batch_size=${CNN_BATCH_SIZE}, max_epochs=${CNN_MAX_EPOCHS}, patience=${CNN_PATIENCE}, learning_rate=${CNN_LEARNING_RATE}, weight_decay=${CNN_WEIGHT_DECAY}"
+echo "  phowhisper_frozen: batch_size=${PHOWHISPER_FROZEN_BATCH_SIZE}, max_epochs=${PHOWHISPER_FROZEN_MAX_EPOCHS}, patience=${PHOWHISPER_FROZEN_PATIENCE}, learning_rate=${PHOWHISPER_FROZEN_LEARNING_RATE}, weight_decay=${PHOWHISPER_FROZEN_WEIGHT_DECAY}"
+echo "  phowhisper_fine_tune: batch_size=${PHOWHISPER_FINE_TUNE_BATCH_SIZE}, max_epochs=${PHOWHISPER_FINE_TUNE_MAX_EPOCHS}, patience=${PHOWHISPER_FINE_TUNE_PATIENCE}, learning_rate=${PHOWHISPER_FINE_TUNE_LEARNING_RATE}, weight_decay=${PHOWHISPER_FINE_TUNE_WEIGHT_DECAY}"
+
 run_step \
   "Phase 4: MFCC baselines" \
-  "${PYTHON_BIN}" -m src.training.train_baseline "${OVERWRITE_ARGS[@]}"
+  "${PYTHON_BIN}" -m src.training.train_baseline \
+  --seed "${TRAINING_SEED}" \
+  "${OVERWRITE_ARGS[@]}"
 
 run_step \
   "Phase 5: lightweight custom CNN" \
   "${PYTHON_BIN}" -m src.training.train_cnn \
-  --device "${DEVICE}" "${OVERWRITE_ARGS[@]}"
+  --device "${DEVICE}" \
+  --seed "${TRAINING_SEED}" \
+  --batch-size "${CNN_BATCH_SIZE}" \
+  --max-epochs "${CNN_MAX_EPOCHS}" \
+  --patience "${CNN_PATIENCE}" \
+  --learning-rate "${CNN_LEARNING_RATE}" \
+  --weight-decay "${CNN_WEIGHT_DECAY}" \
+  "${OVERWRITE_ARGS[@]}"
 
 run_step \
   "Phase 6a: PhoWhisper pretrained frozen encoder" \
   "${PYTHON_BIN}" -m src.training.train_phowhisper \
   --training-mode frozen_encoder \
-  --learning-rate 1e-3 \
-  --max-epochs 20 \
-  --patience 5 \
   --device "${DEVICE}" \
+  --seed "${TRAINING_SEED}" \
+  --batch-size "${PHOWHISPER_FROZEN_BATCH_SIZE}" \
+  --max-epochs "${PHOWHISPER_FROZEN_MAX_EPOCHS}" \
+  --patience "${PHOWHISPER_FROZEN_PATIENCE}" \
+  --learning-rate "${PHOWHISPER_FROZEN_LEARNING_RATE}" \
+  --weight-decay "${PHOWHISPER_FROZEN_WEIGHT_DECAY}" \
   "${OVERWRITE_ARGS[@]}"
 
 run_step \
@@ -112,6 +171,12 @@ run_step \
   "${PYTHON_BIN}" -m src.training.train_phowhisper \
   --training-mode full_fine_tune \
   --device "${DEVICE}" \
+  --seed "${TRAINING_SEED}" \
+  --batch-size "${PHOWHISPER_FINE_TUNE_BATCH_SIZE}" \
+  --max-epochs "${PHOWHISPER_FINE_TUNE_MAX_EPOCHS}" \
+  --patience "${PHOWHISPER_FINE_TUNE_PATIENCE}" \
+  --learning-rate "${PHOWHISPER_FINE_TUNE_LEARNING_RATE}" \
+  --weight-decay "${PHOWHISPER_FINE_TUNE_WEIGHT_DECAY}" \
   "${OVERWRITE_ARGS[@]}"
 
 run_step \

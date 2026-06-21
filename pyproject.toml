@@ -6,10 +6,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "duckdb>=1.4,<2",
+    "fastapi>=0.115,<1",
     "numpy>=1.26,<3",
+    "python-multipart>=0.0.20,<1",
     "scikit-learn>=1.4,<2",
     "soundfile>=0.13,<1",
     "soxr>=0.5,<1",
     "torch>=2.7,<3",
     "transformers>=4.41,<5",
+    "uvicorn[standard]>=0.34,<1",
 ]

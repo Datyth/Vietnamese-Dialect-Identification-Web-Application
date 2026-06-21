@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vietnamese Dialect Identification</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #f5f6f8; color: #20242a; margin: 0; }
+    main { max-width: 640px; margin: 64px auto; padding: 28px; background: white; border-radius: 14px; box-shadow: 0 8px 28px #0001; }
+    h1 { margin-top: 0; font-size: 1.7rem; }
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { border: 0; border-radius: 8px; padding: 10px 18px; background: #1769e0; color: white; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #result { margin-top: 26px; }
+    .probability { margin: 12px 0; }
+    .label-row { display: flex; justify-content: space-between; }
+    .bar { height: 9px; margin-top: 5px; background: #e5e9f0; border-radius: 9px; overflow: hidden; }
+    .fill { height: 100%; background: #1769e0; }
+    .error { color: #b42318; }
+    .note { margin-top: 24px; color: #667085; font-size: .88rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Vietnamese Dialect Identification</h1>
+    <p>Upload an audio recording to classify it as Northern, Central, or Southern.</p>
+    <div class="controls">
+      <input id="audio" type="file" accept="audio/*">
+      <button id="play" type="button" disabled>Play audio</button>
+      <button id="predict" type="button">Predict</button>
+    </div>
+    <audio id="player" preload="metadata"></audio>
+    <section id="result" aria-live="polite"></section>
+    <p class="note">This is a regional speech demo. It does not identify a speaker, hometown, ethnicity, or personal background. Confidence values are uncalibrated.</p>
+  </main>
+  <script>
+    const input = document.querySelector('#audio');
+    const playButton = document.querySelector('#play');
+    const predictButton = document.querySelector('#predict');
+    const player = document.querySelector('#player');
+    const result = document.querySelector('#result');
+    let audioUrl = null;
+
+    input.addEventListener('change', () => {
+      player.pause();
+      player.removeAttribute('src');
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      audioUrl = null;
+      playButton.disabled = true;
+      playButton.textContent = 'Play audio';
+      if (input.files.length) {
+        audioUrl = URL.createObjectURL(input.files[0]);
+        player.src = audioUrl;
+        playButton.disabled = false;
+      }
+    });
+
+    playButton.addEventListener('click', async () => {
+      if (!player.src) return;
+      if (player.paused) {
+        try {
+          await player.play();
+        } catch (error) {
+          result.textContent = `Cannot play this audio file: ${error.message}`;
+        }
+      } else {
+        player.pause();
+      }
+    });
+
+    player.addEventListener('play', () => { playButton.textContent = 'Pause audio'; });
+    player.addEventListener('pause', () => { playButton.textContent = 'Play audio'; });
+    player.addEventListener('ended', () => { playButton.textContent = 'Play audio'; });
+
+    predictButton.addEventListener('click', async () => {
+      if (!input.files.length) {
+        result.innerHTML = '<p class="error">Choose an audio file first.</p>';
+        return;
+      }
+      predictButton.disabled = true;
+      result.textContent = 'Predicting…';
+      const body = new FormData();
+      body.append('file', input.files[0]);
+      try {
+        const response = await fetch('/predict', { method: 'POST', body });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Prediction failed.');
+
+        result.replaceChildren();
+        const heading = document.createElement('h2');
+        heading.textContent = `${data.prediction} — ${(data.confidence * 100).toFixed(1)}%`;
+        result.appendChild(heading);
+        for (const [label, probability] of Object.entries(data.probabilities)) {
+          const item = document.createElement('div');
+          item.className = 'probability';
+          item.innerHTML = `<div class="label-row"><span></span><strong></strong></div><div class="bar"><div class="fill"></div></div>`;
+          item.querySelector('span').textContent = label;
+          item.querySelector('strong').textContent = `${(probability * 100).toFixed(1)}%`;
+          item.querySelector('.fill').style.width = `${probability * 100}%`;
+          result.appendChild(item);
+        }
+      } catch (error) {
+        result.innerHTML = '';
+        const message = document.createElement('p');
+        message.className = 'error';
+        message.textContent = error.message;
+        result.appendChild(message);
+      } finally {
+        predictButton.disabled = false;
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+    });
+  </script>
+</body>
+</html>

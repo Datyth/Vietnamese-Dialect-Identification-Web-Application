@@ -1,5 +1,134 @@
 # Implementation Report
 
+## Latest Update: Browser Audio Playback
+
+### Task Summary
+
+Added Play/Pause controls for the locally selected upload file in the Phase 8
+frontend. Playback uses a browser object URL and does not send an extra request.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/app/static/index.html` | Added audio player state, Play/Pause button, object URL creation, and cleanup. |
+| `README.md` | Documented local pre-prediction playback. |
+| `reports/implementation_report.md` | Recorded implementation and verification. |
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+python -c "... parse src/app/static/index.html with html.parser ..."
+git diff --check
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| HTML parsing | Passed. |
+| Playback controls | Play button, audio element, object URL, Play/Pause handlers, and URL cleanup are present. |
+| Backend impact | None; `/predict` and model inference are unchanged. |
+
+### Known Limitations
+
+- Playback depends on the browser's native codec support for the selected file.
+- Browser playback was inspected statically because the managed sandbox cannot
+  open an interactive browser.
+
+---
+
+## Latest Update: Phase 8 CNN Inference And FastAPI App
+
+### Task Summary
+
+Implemented a PyTorch inference pipeline and FastAPI upload app for the existing
+Phase 5 lightweight CNN without changing preprocessing, feature extraction,
+training logic, or model architecture.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/inference/predict.py` | Strict checkpoint validation, device selection, shared preprocessing/log-Mel extraction, and softmax prediction. |
+| `src/inference/__init__.py` | Inference package marker. |
+| `src/app/main.py` | FastAPI lifespan model loading plus `/`, `/health`, and `/predict`. |
+| `src/app/static/index.html` | Minimal upload UI and per-class probability bars. |
+| `src/app/__init__.py` | App package marker. |
+| `tests/test_inference.py` | Read-only CPU smoke test against one existing preprocessed sample. |
+| `requirements.txt`, `pyproject.toml` | Added FastAPI runtime dependencies. |
+| `README.md` | Added exact app and smoke-test commands. |
+
+### Implementation Scope And Decisions
+
+- `predict()` calls the existing `preprocess_file()`, reloads its PCM16 output,
+  and calls the existing `log_mel_spectrogram()`; feature math is not duplicated.
+- Checkpoint metadata must match the code constants for model name, feature name,
+  16 kHz sample rate, 256,000 samples, 64 Mel bins, and label order.
+- Label order is imported from CNN training as Northern, Central, Southern.
+- The model is reconstructed with `LightweightCNN`, loaded from
+  `model_state_dict`, moved to the selected device, and put in eval mode.
+- FastAPI lifespan loads the checkpoint once. Automatic device priority is CUDA,
+  then MPS, then CPU.
+- Uploaded files and inference preprocessing outputs use OS temporary storage and
+  are removed after each request.
+
+### Dependencies
+
+- `fastapi` provides the HTTP routes and JSON responses.
+- `uvicorn[standard]` provides the local ASGI server.
+- `python-multipart` is required by FastAPI for multipart audio uploads.
+- Existing `soundfile`, `soxr`, NumPy, and PyTorch dependencies remain the audio
+  and model runtime; no additional audio library was added.
+
+### Commands Run
+
+```bash
+sed -n '1,260p' PLAN.md
+nl -ba src/utils/audio.py
+nl -ba src/features/logmel.py
+nl -ba src/features/mfcc.py
+nl -ba src/training/train_cnn.py
+nl -ba src/models/cnn.py
+.venv/bin/python -c "... inspect CNN checkpoint metadata ..."
+.venv/bin/python -m unittest tests.test_inference -v
+.venv/bin/python -m compileall -q src tests
+env UV_CACHE_DIR=/tmp/vimd-uv-cache uv pip install --python .venv/bin/python -r requirements.txt
+env CNN_DEVICE=cpu .venv/bin/python -m uvicorn src.app.main:app --host 127.0.0.1 --port 8765
+.venv/bin/python -c "... run FastAPI lifespan, health, index, and predict_upload ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| CNN checkpoint | Found at `outputs/models/lightweight_cnn_logmel.pt`; state-dict checkpoint, epoch 13. |
+| CPU inference smoke test | Passed: three ordered classes, probability sum approximately 1, valid predicted label. |
+| Full unit tests before final documentation | Passed: 26 tests. |
+| Python compilation | Passed. |
+| FastAPI dependencies | Installed and importable in `.venv`. |
+| App startup | Passed through lifespan/model loading. Localhost bind was denied by the managed sandbox. |
+| Direct endpoint smoke check | Passed: health reported CPU, index resolved `index.html`, upload returned all three classes. |
+
+### Known Limitations
+
+- The managed sandbox does not permit binding a localhost port, so browser access
+  was not exercised here; run uvicorn from a normal terminal.
+- The local CNN checkpoint is ignored by Git and is required at app startup.
+- Softmax confidence is uncalibrated.
+- The CNN remains the existing Phase 5 model; no retraining or architecture
+  change was performed.
+
+### Reviewer Priorities
+
+1. Start uvicorn locally and verify one browser upload.
+2. Keep checkpoint metadata validation intact to prevent silent preprocessing or
+   label-order mismatch.
+3. Preserve the regional-classification disclaimer in future UI work.
+
+---
+
 ## Latest Update: Resumable ViMD Shard Downloads
 
 ### Task Summary

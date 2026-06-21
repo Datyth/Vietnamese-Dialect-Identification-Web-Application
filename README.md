@@ -330,3 +330,45 @@ Current best model by validation macro F1 is still the Phase 4 SVM baseline:
 | Lightweight CNN | 0.4339 | 0.6668 |
 | PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 |
 | PhoWhisper fine-tuned | 0.6623 | 0.7113 |
+
+## Phase 8: CNN Inference And FastAPI App
+
+Phase 8 serves the trained lightweight CNN through a Python inference module,
+JSON API, and minimal browser interface. Inference imports the same Phase 2
+`preprocess_file()` and Phase 5 `log_mel_spectrogram()` used for training.
+
+Install dependencies:
+
+```bash
+uv pip install --python .venv/bin/python -r requirements.txt
+```
+
+Run the app with the default checkpoint:
+
+```bash
+.venv/bin/python -m uvicorn src.app.main:app --reload
+```
+
+Override the checkpoint or device when needed:
+
+```bash
+CNN_CHECKPOINT_PATH=outputs/models/lightweight_cnn_logmel.pt \
+CNN_DEVICE=auto \
+.venv/bin/python -m uvicorn src.app.main:app --reload
+```
+
+`CNN_DEVICE=auto` prefers CUDA, then Apple MPS, then CPU. Open
+`http://127.0.0.1:8000/`; health information is available at `/health`, and
+multipart audio prediction is available at `POST /predict`.
+The browser page can also play or pause the selected local audio before sending
+it for prediction; playback stays in the browser.
+
+Run the read-only CPU inference smoke test:
+
+```bash
+.venv/bin/python -m unittest tests.test_inference -v
+```
+
+The CNN checkpoint under `outputs/models/` is ignored by Git and must exist
+locally. Softmax confidence is uncalibrated, and the app predicts only the three
+regional labels—it does not infer identity, hometown, ethnicity, or background.

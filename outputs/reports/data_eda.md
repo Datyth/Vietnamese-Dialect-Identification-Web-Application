@@ -14,7 +14,7 @@ Phase 3 is intentionally limited to validation needed before the traditional MFC
 
 | Source | Min | Median | Mean | Max |
 | --- | ---: | ---: | ---: | ---: |
-| Original selected audio | 2.51s | 15.94s | 16.01s | 31.82s |
+| Original selected audio | 2.51s | 15.89s | 15.92s | 31.82s |
 | Preprocessed audio | 16.00s | 16.00s | 16.00s | 16.00s |
 
 ## Validation Summary

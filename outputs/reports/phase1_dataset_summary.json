@@ -52,8 +52,8 @@
     "downloaded": 390,
     "not_selected_under_data_budget": 18559
   },
-  "downloaded_audio_bytes": 199845320,
-  "data_directory_bytes": 252100349,
+  "downloaded_audio_bytes": 198664126,
+  "data_directory_bytes": 210344829,
   "max_data_bytes": 1000000000,
   "data_cap_respected": true,
   "selection_seed": 42,

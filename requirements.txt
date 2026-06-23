@@ -1,5 +1,6 @@
 duckdb>=1.4,<2
 fastapi>=0.115,<1
+matplotlib>=3.8,<4
 numpy>=1.26,<3
 python-multipart>=0.0.20,<1
 scikit-learn>=1.4,<2

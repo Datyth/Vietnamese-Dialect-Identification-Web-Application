@@ -1,5 +1,88 @@
 # Implementation Report
 
+## Latest Update: Feature Visualization Notebook
+
+### Task Summary
+
+Added a presentation/report notebook for section 2.5 that selects real train
+audio samples from all three dialect classes, exports original and preprocessed
+clips, visualizes waveform/MFCC/log-Mel features, and writes a Vietnamese
+summary report.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `notebooks/feature_visualization.ipynb` | End-to-end feature visualization notebook with Vietnamese explanations and generated artifact validation. |
+| `outputs/reports/feature_visualization_summary.md` | Generated presentation-ready Vietnamese summary from the executed notebook. |
+| `requirements.txt`, `pyproject.toml` | Add direct `matplotlib` dependency for notebook plotting. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- Reused `src/utils/audio.py`, `src/features/mfcc.py`, and
+  `src/features/logmel.py` instead of duplicating preprocessing or feature
+  extraction logic.
+- Preferred `data/processed/preprocessed_metadata.csv` and the train split when
+  selecting samples, with deterministic `random_state = 42`.
+- Selected 5 samples for each of Northern, Central, and Southern from real local
+  dataset audio.
+- Exported preprocessed and original WAV files under
+  `outputs/audio/feature_visualization/`.
+- Saved all figures at 300 DPI under `outputs/figures/feature_visualization/`.
+- Kept generated visualizations exploratory and included limitations about
+  speaker identity, sentence content, recording condition, and noise.
+
+### Dependencies
+
+- Added `matplotlib>=3.8,<4` because the notebook must generate waveform,
+  heatmap, vector, and distribution figures. The standard library and existing
+  NumPy/audio utilities cannot create the requested PNG charts by themselves.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+rg --files
+.venv/bin/python -c "... check train rows and existing audio by class ..."
+.venv/bin/python -c "... check numpy, soundfile, matplotlib, IPython, nbformat, nbconvert imports ..."
+mkdir -p notebooks outputs/figures/feature_visualization outputs/audio/feature_visualization outputs/reports
+env JUPYTER_CONFIG_DIR=/private/tmp/vimd_jupyter_config JUPYTER_DATA_DIR=/private/tmp/vimd_jupyter_data JUPYTER_RUNTIME_DIR=/private/tmp/vimd_jupyter_runtime .venv/bin/jupyter nbconvert --to notebook --execute notebooks/feature_visualization.ipynb --output /private/tmp/feature_visualization_executed.ipynb
+find outputs/audio/feature_visualization -type f | sort | wc -l
+find outputs/figures/feature_visualization -type f | sort | wc -l
+sed -n '1,220p' outputs/reports/feature_visualization_summary.md
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Dataset availability | Train split has existing audio for all classes: Northern 3,708; Central 3,416; Southern 3,854. |
+| Notebook execution | Passed with `nbconvert`; generated artifacts from real local audio. |
+| Audio exports | 30 WAV files: original and preprocessed clips for 15 selected samples. |
+| Individual feature figures | 15 PNG files, one per selected sample. |
+| Summary figures | 7 PNG files: waveform grid, MFCC grid, log-Mel grid, MFCC vectors, class-average MFCC, log-Mel energy, duration distribution. |
+| Markdown summary | `outputs/reports/feature_visualization_summary.md` generated with sample, figure, audio, limitation, and presentation-script sections. |
+
+### Known Limitations
+
+- Jupyter execution in the managed sandbox required temp Jupyter directories and
+  elevated execution because the local kernel binds loopback ports.
+- The audio and figure artifacts are generated outputs from the current local
+  dataset; rerunning after metadata or data changes can select different files.
+- The figures are exploratory presentation aids, not final scientific proof of
+  dialect differences.
+
+### Reviewer Priorities
+
+1. Open `notebooks/feature_visualization.ipynb` from the repository root and
+   confirm the audio players load via the generated `/files/...` paths.
+2. Review the generated figures for slide readability before placing them in
+   the final report.
+3. Keep the limitation language when reusing the visuals in presentation text.
+
+---
+
 ## Latest Update: Configurable Training Parameters
 
 ### Task Summary

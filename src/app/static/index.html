@@ -9,6 +9,9 @@
     main { max-width: 640px; margin: 64px auto; padding: 28px; background: white; border-radius: 14px; box-shadow: 0 8px 28px #0001; }
     h1 { margin-top: 0; font-size: 1.7rem; }
     .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .field { display: grid; gap: 5px; font-size: .9rem; color: #475467; }
+    select, input::file-selector-button { font: inherit; }
+    select { min-width: 210px; padding: 9px 12px; border: 1px solid #cfd6e0; border-radius: 8px; background: white; color: #20242a; }
     button { border: 0; border-radius: 8px; padding: 10px 18px; background: #1769e0; color: white; cursor: pointer; }
     button:disabled { opacity: .55; cursor: wait; }
     #result { margin-top: 26px; }
@@ -25,7 +28,16 @@
     <h1>Vietnamese Dialect Identification</h1>
     <p>Upload an audio recording to classify it as Northern, Central, or Southern.</p>
     <div class="controls">
-      <input id="audio" type="file" accept="audio/*">
+      <label class="field">Audio file
+        <input id="audio" type="file" accept="audio/*">
+      </label>
+      <label class="field">Model
+        <select id="model">
+          <option value="cnn">Lightweight CNN</option>
+          <option value="svm">SVM MFCC baseline</option>
+          <option value="phowhisper">PhoWhisper</option>
+        </select>
+      </label>
       <button id="play" type="button" disabled>Play audio</button>
       <button id="predict" type="button">Predict</button>
     </div>
@@ -35,11 +47,31 @@
   </main>
   <script>
     const input = document.querySelector('#audio');
+    const modelSelect = document.querySelector('#model');
     const playButton = document.querySelector('#play');
     const predictButton = document.querySelector('#predict');
     const player = document.querySelector('#player');
     const result = document.querySelector('#result');
     let audioUrl = null;
+
+    async function loadModels() {
+      try {
+        const response = await fetch('/models');
+        if (!response.ok) return;
+        const data = await response.json();
+        modelSelect.replaceChildren();
+        for (const model of data.models) {
+          const option = document.createElement('option');
+          option.value = model.name;
+          option.textContent = model.available ? model.label : `${model.label} (missing)`;
+          option.disabled = !model.available;
+          option.selected = model.default && model.available;
+          modelSelect.appendChild(option);
+        }
+      } catch (_error) {
+        // Keep the static fallback options available when the metadata endpoint is unavailable.
+      }
+    }
 
     input.addEventListener('change', () => {
       player.pause();
@@ -81,6 +113,7 @@
       result.textContent = 'Predicting…';
       const body = new FormData();
       body.append('file', input.files[0]);
+      body.append('model', modelSelect.value);
       try {
         const response = await fetch('/predict', { method: 'POST', body });
         const data = await response.json();
@@ -88,7 +121,7 @@
 
         result.replaceChildren();
         const heading = document.createElement('h2');
-        heading.textContent = `${data.prediction} — ${(data.confidence * 100).toFixed(1)}%`;
+        heading.textContent = `${data.model_label}: ${data.prediction} — ${(data.confidence * 100).toFixed(1)}%`;
         result.appendChild(heading);
         for (const [label, probability] of Object.entries(data.probabilities)) {
           const item = document.createElement('div');
@@ -113,6 +146,8 @@
     window.addEventListener('beforeunload', () => {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
     });
+
+    loadModels();
   </script>
 </body>
 </html>

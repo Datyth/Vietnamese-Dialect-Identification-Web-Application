@@ -331,11 +331,15 @@ Current best model by validation macro F1 is still the Phase 4 SVM baseline:
 | PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 |
 | PhoWhisper fine-tuned | 0.6623 | 0.7113 |
 
-## Phase 8: CNN Inference And FastAPI App
+## Phase 8: Selectable Inference And FastAPI App
 
-Phase 8 serves the trained lightweight CNN through a Python inference module,
-JSON API, and minimal browser interface. Inference imports the same Phase 2
-`preprocess_file()` and Phase 5 `log_mel_spectrogram()` used for training.
+Phase 8 serves trained dialect classifiers through a Python inference module,
+JSON API, and minimal browser interface. The app defaults to the lightweight
+CNN, and the browser also lets the user choose the SVM MFCC baseline or
+PhoWhisper when the local artifacts are available. Inference imports the same
+Phase 2 `preprocess_file()`, Phase 4 `mfcc_mean_std()`, Phase 5
+`log_mel_spectrogram()`, and Phase 6 PhoWhisper feature extraction conventions
+used for training.
 
 Install dependencies:
 
@@ -343,23 +347,32 @@ Install dependencies:
 uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
-Run the app with the default checkpoint:
+Run the app with the default model selection:
 
 ```bash
 .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
-Override the checkpoint or device when needed:
+Override model artifacts, default model, or device when needed:
 
 ```bash
+DEFAULT_MODEL=cnn \
 CNN_CHECKPOINT_PATH=outputs/models/lightweight_cnn_logmel.pt \
+SVM_MODEL_PATH=outputs/models/svm_mfcc.pkl \
+PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_dialect.pt \
+PHOWHISPER_CACHE_DIR=outputs/models/hf_cache \
 CNN_DEVICE=auto \
+PHOWHISPER_DEVICE=auto \
 .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
-`CNN_DEVICE=auto` prefers CUDA, then Apple MPS, then CPU. Open
-`http://127.0.0.1:8000/`; health information is available at `/health`, and
-multipart audio prediction is available at `POST /predict`.
+`CNN_DEVICE=auto` and `PHOWHISPER_DEVICE=auto` prefer CUDA, then Apple MPS, then
+CPU. PhoWhisper uses local Hugging Face cache files by default; set
+`PHOWHISPER_LOCAL_FILES_ONLY=0` only in an environment where network access is
+intended. Open `http://127.0.0.1:8000/`; model metadata is available at
+`/models`, health information is available at `/health`, and multipart audio
+prediction is available at `POST /predict` with form fields `file` and `model`
+where `model` is one of `cnn`, `svm`, or `phowhisper`.
 The browser page can also play or pause the selected local audio before sending
 it for prediction; playback stays in the browser.
 
@@ -369,6 +382,8 @@ Run the read-only CPU inference smoke test:
 .venv/bin/python -m unittest tests.test_inference -v
 ```
 
-The CNN checkpoint under `outputs/models/` is ignored by Git and must exist
-locally. Softmax confidence is uncalibrated, and the app predicts only the three
-regional labels—it does not infer identity, hometown, ethnicity, or background.
+Model artifacts under `outputs/models/` must exist locally. CNN and PhoWhisper
+return softmax confidence; SVM returns a softmax-normalized decision-margin score
+for display only. All confidence values are uncalibrated, and the app predicts
+only the three regional labels—it does not infer identity, hometown, ethnicity,
+or background.

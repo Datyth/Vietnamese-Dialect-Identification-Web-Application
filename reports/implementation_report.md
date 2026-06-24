@@ -1,5 +1,93 @@
 # Implementation Report
 
+## Latest Update: Selectable App Models
+
+### Task Summary
+
+Added user-selectable inference models to the FastAPI demo. The browser can now
+choose between the existing lightweight CNN, the Phase 4 SVM MFCC baseline, and
+the Phase 6 PhoWhisper classifier before submitting an audio file.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/inference/predict.py` | Adds model-name normalization, SVM loading/prediction, PhoWhisper loading/prediction, and keeps CNN as the default path. |
+| `src/app/main.py` | Adds `/models`, model-aware `/health`, lazy model loading, and `model` form handling for `/predict`. |
+| `src/app/static/index.html` | Adds a model selector and sends the selected model with each prediction. |
+| `tests/test_inference.py` | Adds SVM smoke coverage and model-name alias checks. |
+| `README.md` | Documents selectable models, new environment variables, `/models`, and form field usage. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- Reused existing trained artifacts:
+  `outputs/models/lightweight_cnn_logmel.pt`,
+  `outputs/models/svm_mfcc.pkl`, and
+  `outputs/models/phowhisper_dialect.pt`.
+- Reused existing feature code instead of adding separate app preprocessing:
+  CNN uses `log_mel_spectrogram()`, SVM uses `mfcc_mean_std()`, and PhoWhisper
+  uses the training-time Hugging Face feature extractor convention.
+- Kept `cnn` as the default model for backward compatibility.
+- Loaded models lazily on first use so the app can start without immediately
+  loading the larger PhoWhisper weights.
+- Added tolerant aliases such as `lightweight-cnn`,
+  `support_vector_machine`, and the misspelled `phoWIshper`.
+- Kept SVM confidence clearly uncalibrated: its displayed class scores are
+  softmax-normalized decision margins, not probabilities.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+sed -n '1,280p' src/inference/predict.py
+sed -n '1,280p' src/app/main.py
+sed -n '1,320p' src/app/static/index.html
+find outputs/models -maxdepth 3 -type f | sort
+.venv/bin/python -c "... inspect SVM/CNN/PhoWhisper artifact metadata ..."
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m unittest tests.test_inference -v
+.venv/bin/python -c "... parse src/app/static/index.html with html.parser ..."
+.venv/bin/python -c "... FastAPI TestClient /models and SVM /predict smoke ..."
+.venv/bin/python -c "... load PhoWhisper from local cache and run one CPU prediction ..."
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+env CNN_DEVICE=cpu PHOWHISPER_DEVICE=cpu .venv/bin/python -m uvicorn src.app.main:app --host 127.0.0.1 --port 8765
+.venv/bin/python -c "... GET http://127.0.0.1:8765/models ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Python compilation | Passed for `src` and `tests`. |
+| Focused inference tests | Passed: CNN default prediction, SVM prediction, and aliases. |
+| HTML parsing | Passed. |
+| FastAPI smoke | `/models` returned `cnn`, `svm`, `phowhisper`; `/predict` with `model=svm` returned 200. |
+| PhoWhisper smoke | Loaded `outputs/models/phowhisper_dialect.pt` from local HF cache on CPU and returned a 3-class prediction. |
+| Full test suite | Passed: 28 tests with explicit `unittest discover -s tests -p 'test_*.py' -v`. |
+| Local app server | Started on `http://127.0.0.1:8765`; `/models` returned all three models as available. |
+
+### Known Limitations
+
+- PhoWhisper still needs the local Hugging Face cache under
+  `outputs/models/hf_cache` unless `PHOWHISPER_LOCAL_FILES_ONLY=0` is used in
+  an environment with network access.
+- First PhoWhisper prediction is slower because the checkpoint is loaded lazily.
+- CNN and PhoWhisper softmax confidence and SVM margin-derived scores are not
+  calibrated probabilities.
+- The app still predicts only Northern, Central, and Southern; it does not infer
+  speaker identity, hometown, ethnicity, or personal background.
+
+### Reviewer Priorities
+
+1. Start the app and verify the dropdown behavior with one real audio upload for
+   each available model.
+2. Keep the uncalibrated-confidence disclaimer visible if the UI is restyled.
+3. Prefer SVM for fastest CPU demo fallback when PhoWhisper startup latency is
+   too high.
+
+---
+
 ## Latest Update: Feature Visualization Notebook
 
 ### Task Summary

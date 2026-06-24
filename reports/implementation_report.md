@@ -1,5 +1,62 @@
 # Implementation Report
 
+## Latest Update: App Model Selector Cache Fix
+
+### Task Summary
+
+Fixed the browser continuing to show the old single-model app shell after the
+model selector was added.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/app/main.py` | Serves `/` with no-store/no-cache headers so `index.html` is not reused stale by the browser. |
+| `tests/test_app.py` | Adds regression checks that `/` contains the model selector and no-cache header, and `/models` lists all selectable models. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- Kept the existing static HTML file and FastAPI route structure.
+- Added only response headers for the app shell rather than changing the UI
+  layout or prediction APIs.
+- Added a narrow app-shell test because the reported issue was visible before
+  any model inference happened.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+sed -n '1,220p' src/app/static/index.html
+sed -n '1,220p' src/app/main.py
+.venv/bin/python -m unittest tests.test_app tests.test_inference -v
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -c "... TestClient GET / confirms cache-control and id=\"model\" ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| App shell tests | Passed: `/` contains `id="model"` and `Cache-Control: no-store`; `/models` lists `cnn`, `svm`, `phowhisper`. |
+| Inference focused tests | Passed: CNN/SVM smoke tests and model aliases. |
+| Python compilation | Passed for `src` and `tests`. |
+| Direct app-shell smoke | Passed: status 200, no-store header, model selector present. |
+
+### Known Limitations
+
+- A browser tab that already has the old HTML loaded still needs a reload after
+  restarting uvicorn. The new response headers prevent future stale reuse.
+
+### Reviewer Priorities
+
+1. Stop the current uvicorn process, restart it, and reload
+   `http://127.0.0.1:8000/`.
+2. If an already-open tab still shows the old layout once, force reload with
+   `Cmd+Shift+R` or open `http://127.0.0.1:8000/?v=2`.
+
+---
+
 ## Latest Update: Selectable App Models
 
 ### Task Summary

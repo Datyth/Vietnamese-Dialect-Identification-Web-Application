@@ -28,6 +28,10 @@ from src.inference.predict import (
 
 
 STATIC_ROOT = Path(__file__).parent / "static"
+NO_STORE_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
 MODEL_DISPLAY_NAMES = {
     "cnn": "Lightweight CNN",
     "svm": "SVM MFCC baseline",
@@ -99,7 +103,7 @@ app = FastAPI(
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_ROOT / "index.html")
+    return FileResponse(STATIC_ROOT / "index.html", headers=NO_STORE_HEADERS)
 
 
 @app.get("/health")

@@ -1,5 +1,61 @@
 # Implementation Report
 
+## Latest Update: PhoWhisper Frozen Default
+
+### Task Summary
+
+Changed the app's default PhoWhisper checkpoint from the fine-tuned checkpoint
+to the pretrained frozen-encoder checkpoint requested for the demo.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/inference/predict.py` | Sets `DEFAULT_PHOWHISPER_CHECKPOINT_PATH` to `outputs/models/phowhisper_pretrained_frozen_encoder.pt`. |
+| `tests/test_app.py` | Verifies `/models` exposes the frozen-encoder checkpoint path for the PhoWhisper option. |
+| `README.md` | Documents the frozen-encoder default and how to override to the fine-tuned checkpoint. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- Kept the single UI option name `PhoWhisper`; only its default checkpoint path
+  changed.
+- Preserved `PHOWHISPER_CHECKPOINT_PATH` as the override for manually selecting
+  `outputs/models/phowhisper_dialect.pt` or another compatible checkpoint.
+- Did not retrain or modify model artifacts.
+
+### Commands Run
+
+```bash
+sed -n '1,240p' PLAN.md
+rg -n "PHOWHISPER|phowhisper_dialect|phowhisper_pretrained|DEFAULT_PHOWHISPER" src README.md tests reports/implementation_report.md
+.venv/bin/python -m unittest tests.test_app tests.test_inference -v
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -c "... TestClient GET /models confirms PhoWhisper artifact path ..."
+.venv/bin/python -c "... load_phowhisper_model() default path and predict one sample ..."
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| App shell/inference tests | Passed: `/models` exposes `outputs/models/phowhisper_pretrained_frozen_encoder.pt`; CNN/SVM inference smoke tests still pass. |
+| Python compilation | Passed for `src` and `tests`. |
+| PhoWhisper default smoke | Passed: default `load_phowhisper_model()` loaded and returned one CPU prediction. |
+
+### Known Limitations
+
+- The frozen-encoder checkpoint still requires the local PhoWhisper Hugging Face
+  cache under `outputs/models/hf_cache`.
+
+### Reviewer Priorities
+
+1. Restart uvicorn so the new default path is loaded.
+2. Confirm `/models` shows the PhoWhisper artifact path as
+   `outputs/models/phowhisper_pretrained_frozen_encoder.pt`.
+
+---
+
 ## Latest Update: App Model Selector Cache Fix
 
 ### Task Summary

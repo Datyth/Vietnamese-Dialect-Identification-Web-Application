@@ -359,7 +359,7 @@ Override model artifacts, default model, or device when needed:
 DEFAULT_MODEL=cnn \
 CNN_CHECKPOINT_PATH=outputs/models/lightweight_cnn_logmel.pt \
 SVM_MODEL_PATH=outputs/models/svm_mfcc.pkl \
-PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_dialect.pt \
+PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_pretrained_frozen_encoder.pt \
 PHOWHISPER_CACHE_DIR=outputs/models/hf_cache \
 CNN_DEVICE=auto \
 PHOWHISPER_DEVICE=auto \
@@ -367,9 +367,12 @@ PHOWHISPER_DEVICE=auto \
 ```
 
 `CNN_DEVICE=auto` and `PHOWHISPER_DEVICE=auto` prefer CUDA, then Apple MPS, then
-CPU. PhoWhisper uses local Hugging Face cache files by default; set
-`PHOWHISPER_LOCAL_FILES_ONLY=0` only in an environment where network access is
-intended. Open `http://127.0.0.1:8000/`; model metadata is available at
+CPU. The PhoWhisper option defaults to the frozen-encoder checkpoint
+`outputs/models/phowhisper_pretrained_frozen_encoder.pt`; set
+`PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_dialect.pt` only when you
+want the fine-tuned checkpoint. PhoWhisper uses local Hugging Face cache files
+by default; set `PHOWHISPER_LOCAL_FILES_ONLY=0` only in an environment where
+network access is intended. Open `http://127.0.0.1:8000/`; model metadata is available at
 `/models`, health information is available at `/health`, and multipart audio
 prediction is available at `POST /predict` with form fields `file` and `model`
 where `model` is one of `cnn`, `svm`, or `phowhisper`.

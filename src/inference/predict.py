@@ -32,7 +32,9 @@ from src.utils.audio import (
 DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/lightweight_cnn_logmel.pt")
 DEFAULT_CHECKPOINT_PATH = DEFAULT_CNN_CHECKPOINT_PATH
 DEFAULT_SVM_MODEL_PATH = Path("outputs/models/svm_mfcc.pkl")
-DEFAULT_PHOWHISPER_CHECKPOINT_PATH = Path("outputs/models/phowhisper_dialect.pt")
+DEFAULT_PHOWHISPER_CHECKPOINT_PATH = Path(
+    "outputs/models/phowhisper_pretrained_frozen_encoder.pt"
+)
 DEFAULT_PHOWHISPER_CACHE_DIR = Path("outputs/models/hf_cache")
 SUPPORTED_MODELS = ("cnn", "svm", "phowhisper")
 MODEL_ALIASES = {

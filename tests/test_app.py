@@ -3,6 +3,7 @@ import unittest
 from fastapi.testclient import TestClient
 
 from src.app.main import app
+from src.inference.predict import DEFAULT_PHOWHISPER_CHECKPOINT_PATH
 
 
 class AppShellTests(unittest.TestCase):
@@ -23,6 +24,13 @@ class AppShellTests(unittest.TestCase):
         self.assertEqual(
             [model["name"] for model in payload["models"]],
             ["cnn", "svm", "phowhisper"],
+        )
+        phowhisper = next(
+            model for model in payload["models"] if model["name"] == "phowhisper"
+        )
+        self.assertEqual(
+            phowhisper["artifact_path"],
+            DEFAULT_PHOWHISPER_CHECKPOINT_PATH.as_posix(),
         )
 
 

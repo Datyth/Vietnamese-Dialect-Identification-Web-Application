@@ -1,4 +1,4 @@
 true_label,pred_Northern,pred_Central,pred_Southern
-Northern,9,2,4
-Central,3,12,0
-Southern,8,1,6
+Northern,268,91,127
+Central,118,251,118
+Southern,110,75,300

@@ -14,30 +14,30 @@
     "target_samples": 256000
   },
   "split_counts": {
-    "train": 300,
-    "valid": 45,
-    "test": 45
+    "train": 10978,
+    "valid": 1458,
+    "test": 1458
   },
   "models": {
     "logistic_regression": {
       "model_path": "outputs/models/logistic_regression_mfcc.pkl",
       "valid": {
-        "accuracy": 0.6,
-        "macro_f1": 0.5980952380952381,
+        "accuracy": 0.5617283950617284,
+        "macro_f1": 0.5612196178694812,
         "per_class_f1": {
-          "Northern": 0.5142857142857142,
-          "Central": 0.8,
-          "Southern": 0.48
+          "Northern": 0.5458248472505092,
+          "Central": 0.5553097345132744,
+          "Southern": 0.5825242718446602
         },
         "confusion_matrix_path": "outputs/metrics/logistic_regression_valid_confusion_matrix.csv"
       },
       "test": {
-        "accuracy": 0.6222222222222222,
-        "macro_f1": 0.6291806958473626,
+        "accuracy": 0.546639231824417,
+        "macro_f1": 0.5463317266929768,
         "per_class_f1": {
-          "Northern": 0.4666666666666667,
-          "Central": 0.8148148148148148,
-          "Southern": 0.6060606060606061
+          "Northern": 0.5403304178814383,
+          "Central": 0.539609644087256,
+          "Southern": 0.5590551181102362
         },
         "confusion_matrix_path": "outputs/metrics/logistic_regression_test_confusion_matrix.csv"
       }
@@ -45,22 +45,22 @@
     "svm": {
       "model_path": "outputs/models/svm_mfcc.pkl",
       "valid": {
-        "accuracy": 0.6888888888888889,
-        "macro_f1": 0.6918445539135195,
+        "accuracy": 0.5685871056241426,
+        "macro_f1": 0.5687528734992007,
         "per_class_f1": {
-          "Northern": 0.6666666666666666,
-          "Central": 0.8571428571428571,
-          "Southern": 0.5517241379310345
+          "Northern": 0.5570866141732284,
+          "Central": 0.5704918032786885,
+          "Southern": 0.5786802030456852
         },
         "confusion_matrix_path": "outputs/metrics/svm_valid_confusion_matrix.csv"
       },
       "test": {
-        "accuracy": 0.6222222222222222,
-        "macro_f1": 0.6264491410208874,
+        "accuracy": 0.5589849108367627,
+        "macro_f1": 0.5592122953500159,
         "per_class_f1": {
-          "Northern": 0.5161290322580645,
-          "Central": 0.896551724137931,
-          "Southern": 0.4666666666666667
+          "Northern": 0.5533980582524272,
+          "Central": 0.5664864864864865,
+          "Southern": 0.5577523413111343
         },
         "confusion_matrix_path": "outputs/metrics/svm_test_confusion_matrix.csv"
       }

@@ -4,9 +4,9 @@ PhoWhisper-base was evaluated as a pretrained frozen-encoder baseline. Only the 
 
 | Split | Accuracy | Macro F1 | Loss |
 | --- | ---: | ---: | ---: |
-| train | 0.9433 | 0.9428 | 0.1307 |
-| valid | 0.6889 | 0.6720 | 1.0789 |
-| test | 0.8000 | 0.7972 | 0.8316 |
+| train | 0.8614 | 0.8590 | 0.3700 |
+| valid | 0.8477 | 0.8474 | 0.3932 |
+| test | 0.8368 | 0.8348 | 0.4445 |
 
 Best epoch by validation macro F1: 8.
 Training device: `mps`.
@@ -25,6 +25,6 @@ Checkpoint: `outputs/models/phowhisper_pretrained_frozen_encoder.pt`.
 ## Latency Estimate
 
 - Samples measured: 5.
-- Mean seconds per sample: 0.0639.
+- Mean seconds per sample: 0.0791.
 
 Confusion matrices and test predictions are saved under `outputs/metrics/`.

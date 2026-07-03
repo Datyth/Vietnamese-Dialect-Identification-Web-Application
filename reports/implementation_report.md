@@ -1,5 +1,279 @@
 # Implementation Report
 
+## Latest Update: README Dataset And Training Results
+
+### Task Summary
+
+Updated `README.md` to reflect the current prepared ViMD subset, preprocessing
+status, full model comparison results, E3/E5/E6 run scripts, and current best
+model.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `README.md` | Replaces stale 390-sample/subset documentation with current 13,894-row dataset and current model metrics. |
+| `reports/implementation_report.md` | Records the documentation update and verification. |
+
+### Scope And Decisions
+
+- Used only local artifacts under `data/processed/`, `outputs/metrics/`, and
+  `outputs/reports/`.
+- Did not retrain models or regenerate metrics.
+- Marked E5 as the local ChunkFormer-style model, not an official pretrained
+  ViP-VL/ChunkFormer checkpoint.
+- Kept README in English to match the existing file style.
+
+### Commands Run
+
+```bash
+sed -n '1,260p' PLAN.md
+sed -n '1,760p' README.md
+find outputs/metrics -maxdepth 1 -type f | sort
+find data/processed -maxdepth 1 -type f | sort
+.venv/bin/python - <<'PY'  # summarize preprocessed metadata counts
+...
+PY
+.venv/bin/python - <<'PY'  # summarize dataset reports and model metrics
+...
+PY
+sed -n '1,520p' README.md
+wc -l README.md
+rg -n "390|0\\.6889|skipped|smoke metrics|E6|13,894|0\\.8474" README.md
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Dataset counts | README matches `13,894` preprocessed rows and the current train/valid/test class counts. |
+| Model metrics | README table matches current local metric JSON/CSV artifacts. |
+| Stale text scan | No stale `390` sample claim or old `0.6889` SVM-best result remains. |
+| README readback | Passed manual readback with `sed`; table and command sections are present. |
+
+### Known Limitations
+
+- This was documentation-only; no training or full test suite was rerun.
+- The README reports the current local artifact state, including the older
+  smaller PhoWhisper full-fine-tune run as a note rather than a primary current
+  comparison row.
+
+### Reviewer Priorities
+
+1. Review the README result table against `outputs/metrics/model_method_comparison.csv`.
+2. Re-run comparison artifact generation only if model metrics are regenerated.
+
+---
+
+## Latest Update: E6 Original Whisper-Base Experiment
+
+### Task Summary
+
+Added Phase 9 E6 for original `openai/whisper-base`, matched to the
+PhoWhisper-base size family, so it can be trained as a frozen-encoder baseline
+and compared against PhoWhisper-base, E1-E5, MFCC baselines, and the main CNN.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `PLAN.md` | Adds E6 scope, hyperparameters, and expected outputs. |
+| `configs/experiments/e6_whisper_base.yaml` | Records the E6 experiment setup. |
+| `src/training/train_e6_whisper.py` | Adds the E6 entrypoint with `openai/whisper-base` defaults and comparison refresh. |
+| `src/training/train_phowhisper.py` | Adds reusable experiment metadata and `--limit-per-split` support for Whisper-family runs. |
+| `src/training/train_extended_deep_learning.py` | Registers E6 in Phase 9 summaries and full method comparison output. |
+| `scripts/train_e6_whisper_mps.sh` | Adds a Terminal-run MPS script for E6 only. |
+| `tests/test_phowhisper.py`, `tests/test_extended_deep_learning.py` | Adds E6 default/alias and subset-limit coverage. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- E6 uses `openai/whisper-base`, the original Whisper base checkpoint.
+- E6 uses `frozen_encoder` mode with batch size 4 by default, matching the
+  lightweight comparison setup used for PhoWhisper-base.
+- E6 writes separate artifacts under `e6_whisper_base_*` so it does not
+  overwrite PhoWhisper outputs.
+- No new dependencies were added; existing `torch` and `transformers` are enough.
+
+### Commands Run
+
+```bash
+bash -n scripts/train_e6_whisper_mps.sh
+scripts/train_e6_whisper_mps.sh --help
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m unittest tests.test_phowhisper tests.test_extended_deep_learning -v
+scripts/train_e6_whisper_mps.sh --overwrite --smoke
+.venv/bin/python - <<'PY'
+from src.training.train_extended_deep_learning import write_method_comparison_from_available, write_phase9_summary_from_available
+write_phase9_summary_from_available()
+write_method_comparison_from_available()
+PY
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax/help | Passed. |
+| Python compilation | Passed for `src` and `tests`. |
+| Focused tests | Passed: 16 tests. |
+| E6 MPS smoke | Passed with `openai/whisper-base`, batch size 4, 6 rows per split, 1 epoch. |
+| Summary refresh | Passed: E6 appears in `deep_learning_comparison.csv`, `model_method_comparison.csv`, and `extended_deep_learning_experiments.md`. |
+
+### Known Limitations
+
+- Current E6 metrics are smoke metrics from a tiny subset. Run
+  `scripts/train_e6_whisper_mps.sh --overwrite` from Terminal to regenerate full
+  E6 metrics and plots.
+- The log about newly initialized `projector` and `classifier` weights is
+  expected because Whisper ASR checkpoints do not contain a 3-class dialect head.
+
+### Reviewer Priorities
+
+1. Run full E6 after E3/E5 as a separate supplement:
+   `scripts/train_e6_whisper_mps.sh --overwrite`.
+2. Compare E6 against E4 PhoWhisper in
+   `outputs/metrics/model_method_comparison.csv`.
+
+---
+
+## Latest Update: E3/E5 Script Bash 3 Fix
+
+### Task Summary
+
+Fixed `scripts/train_e3_e5_mps.sh` failing on macOS Bash 3.2 with
+`LIMIT_ARGS[@]: unbound variable` when running the full command without
+`--smoke`.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `scripts/train_e3_e5_mps.sh` | Replaces empty optional argument arrays with conditionally built command arrays. |
+| `reports/implementation_report.md` | Records the script compatibility fix and verification. |
+
+### Scope And Decisions
+
+- Kept the same user command: `scripts/train_e3_e5_mps.sh --overwrite`.
+- Preserved batch size 4, MPS preflight, E3 checkpoint behavior, and E5
+  training behavior.
+- The fix targets macOS default Bash 3.2 with `set -u`; it avoids expanding
+  empty arrays such as `LIMIT_ARGS[@]`.
+
+### Commands Run
+
+```bash
+bash -n scripts/train_e3_e5_mps.sh
+scripts/train_e3_e5_mps.sh --help
+scripts/train_e3_e5_mps.sh --overwrite --smoke --skip-e5 --no-download
+scripts/train_e3_e5_mps.sh --overwrite --smoke --skip-e3
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed. |
+| Help output | Passed. |
+| E3 smoke on MPS | Passed with cached checkpoint, batch size 4. |
+| E5 smoke on MPS | Passed with batch size 4. |
+
+### Known Limitations
+
+- Smoke verification overwrote the current E3/E5 metrics with tiny-subset
+  metrics. Run the full command again to regenerate real metrics and plots.
+
+### Reviewer Priorities
+
+1. Re-run `scripts/train_e3_e5_mps.sh --overwrite` from a normal Terminal.
+2. Confirm it proceeds past the run settings into E3 training without the
+   `LIMIT_ARGS[@]` error.
+
+---
+
+## Latest Update: E3/E5 MPS Self-Run Script
+
+### Task Summary
+
+Added a Terminal-run script for training Phase 9 E3 and E5 on Apple MPS with
+batch size 4, plus the lightweight code paths needed for E3 wav2vec2 frozen
+embeddings, E5 ChunkFormer-style waveform training, and comparison plots.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `scripts/train_e3_e5_mps.sh` | Runs E3/E5 outside the Codex sandbox, checks MPS, uses batch size 4, and updates comparison artifacts. |
+| `src/training/train_extended_deep_learning.py` | Adds E3 wav2vec2 frozen-embedding training, E5 waveform training, and full method comparison CSV/figures. |
+| `src/models/wav2vec2_classifier.py` | Adds the wav2vec2 embedding classifier head. |
+| `src/models/vipvl_chunkformer_classifier.py` | Makes the local ChunkFormer-style classifier trainable on 16s waveforms without excessive sequence length. |
+| `configs/experiments/e3_wav2vec2.yaml` | Records the Vietnamese wav2vec2 checkpoint and frozen-embedding training mode. |
+| `configs/experiments/e5_vipvl_chunkformer.yaml` | Records the local ChunkFormer-style fallback training mode. |
+| `tests/test_extended_deep_learning.py` | Adds forward/CSV coverage for E3/E5 and method comparison output. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- E3 uses `nguyenvulebinh/wav2vec2-base-vietnamese-250h`, freezes the encoder,
+  extracts mean-pooled embeddings, and trains only a small classifier head.
+- E5 trains the local plain-PyTorch ChunkFormer-style waveform classifier; the
+  official ViP-VL/ChunkFormer checkpoint integration remains a limitation.
+- The script requires `--overwrite` so existing metrics/checkpoints are not
+  regenerated silently.
+- Codex sandboxed commands reported `mps_is_available=False`, but the same venv
+  outside the sandbox reports `mps_is_available=True` and can allocate `mps:0`.
+
+### Commands Run
+
+```bash
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m unittest tests.test_extended_deep_learning -v
+.venv/bin/python - <<'PY'  # sandboxed MPS diagnostic
+import torch
+print(torch.backends.mps.is_built(), torch.backends.mps.is_available())
+PY
+# unsandboxed MPS diagnostic through Codex escalation
+.venv/bin/python - <<'PY'
+import torch
+print(torch.backends.mps.is_built(), torch.backends.mps.is_available())
+print(torch.ones(1, device="mps").cpu().item())
+PY
+scripts/train_e3_e5_mps.sh --help
+scripts/train_e3_e5_mps.sh --overwrite --smoke --skip-e5
+scripts/train_e3_e5_mps.sh --overwrite --smoke --skip-e3
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Python compilation | Passed for `src` and `tests`. |
+| Focused Phase 9 tests | Passed: 7 tests. |
+| MPS outside sandbox | Passed: `mps_is_available=True`, `device_count=1`, tensor allocation on `mps:0` succeeded. |
+| E3 script smoke | Passed on MPS with batch size 4, 6 rows per split, 1 epoch. |
+| E5 script smoke | Passed on MPS with batch size 4, 6 rows per split, 1 epoch. |
+
+### Known Limitations
+
+- Full E3/E5 training was not completed in Codex because sandboxed commands
+  cannot access MPS and CPU wav2vec2 extraction is too slow.
+- Current E3/E5 metric JSON files were overwritten by smoke verification; run
+  `scripts/train_e3_e5_mps.sh --overwrite` from a normal Terminal to regenerate
+  full metrics and plots.
+- E3 first run may need network access unless the wav2vec2 checkpoint is already
+  cached under `outputs/models/hf_cache`.
+- E5 is a local ChunkFormer-style fallback, not an official ViP-VL/ChunkFormer
+  pretrained checkpoint result.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e3_e5_mps.sh --overwrite` from a normal Terminal window.
+2. Confirm the script preflight shows `mps_is_available=True`.
+3. Review `outputs/metrics/model_method_comparison.csv` and the two comparison
+   plots after the full run completes.
+
+---
+
 ## Latest Update: PhoWhisper Frozen Default
 
 ### Task Summary

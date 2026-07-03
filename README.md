@@ -1,11 +1,17 @@
-# Vietnamese-Dialect-Identification-Web-Application
-This project aims to build a lightweight system that classifies short Vietnamese speech recordings into regional dialect groups. The initial scope is three classes: Northern, Central, and Southern.
+# Vietnamese Dialect Identification Web Application
 
-## Phase 1: Dataset Metadata
+Lightweight Vietnamese speech dialect classification for three regional labels:
+`Northern`, `Central`, and `Southern`.
 
-Phase 1 prepares the official
-[ViMD dataset](https://huggingface.co/datasets/nguyendv02/ViMD_Dataset)
-for the three project labels:
+The current project state includes metadata preparation, audio preprocessing,
+MFCC baselines, a lightweight CNN, PhoWhisper-base, extended E1-E6 experiments,
+final comparison artifacts, and a FastAPI demo app.
+
+## Dataset
+
+The project uses the official
+[ViMD dataset](https://huggingface.co/datasets/nguyendv02/ViMD_Dataset) and maps
+its source regions into three project labels:
 
 | ViMD region | Project label |
 | --- | --- |
@@ -13,347 +19,211 @@ for the three project labels:
 | `Central` | `Central` |
 | `South` | `Southern` |
 
-The preparation command reads metadata columns from the remote Parquet shards,
-then processes one selected shard at a time. It prioritizes short files and
-speaker diversity, stores mono 16 kHz PCM WAV files, and removes each temporary
-shard before continuing. Large targets may span as many source shards as needed;
-interrupted shard downloads retry with HTTP Range and preserve `.part` files for
-the next run. The configured byte budget remains the limiting constraint. The
-default balanced subset is:
+Current prepared metadata:
 
-| Split | Northern | Central | Southern |
-| --- | ---: | ---: | ---: |
-| Train | 100 | 100 | 100 |
-| Validation | 15 | 15 | 15 |
-| Test | 15 | 15 | 15 |
+| Item | Count |
+| --- | ---: |
+| Official metadata rows | 18,949 |
+| Provinces | 63 |
+| Speakers in metadata | 12,953 |
+| Downloaded local audio rows | 13,894 |
+| Not selected under local data budget | 5,055 |
+| Preprocessed rows | 13,894 |
+| Preprocessing issues | 0 |
 
-The complete `data/` directory remains below the strict 1,000,000,000-byte
-limit:
+Current downloaded/preprocessed split:
 
-```bash
-python3 -m pip install -r requirements.txt
-python3 -m src.data.prepare_metadata
-```
+| Split | Northern | Central | Southern | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 3,708 | 3,416 | 3,854 | 10,978 |
+| Validation | 486 | 487 | 485 | 1,458 |
+| Test | 486 | 487 | 485 | 1,458 |
+| Total | 4,680 | 4,390 | 4,824 | 13,894 |
 
-Custom targets:
+Speaker IDs in the prepared subset:
 
-```bash
-python3 -m src.data.prepare_metadata --overwrite \
-  --train-per-label 100 --valid-per-label 15 --test-per-label 15
-```
+| Label | Speaker IDs |
+| --- | ---: |
+| Northern | 3,419 |
+| Central | 3,022 |
+| Southern | 3,101 |
+| Total unique speaker IDs | 9,542 |
 
-Use metadata only, without downloading audio:
+Preprocessing converts audio to mono 16 kHz waveform, trims silence, normalizes
+volume, and center-crops or pads every sample to exactly 16 seconds
+(`256,000` samples). Original duration statistics in the current subset are:
+min `1.054s`, median `19.117s`, mean `19.157s`, max `32.240s`.
 
-```bash
-python3 -m src.data.prepare_metadata --metadata-only
-```
-
-Generated Phase 1 outputs:
+Key dataset artifacts:
 
 - `data/processed/metadata_clean.csv`
+- `data/processed/preprocessed_metadata.csv`
+- `data/processed/audio_preprocessed_16s/`
 - `data/processed/class_counts.csv`
 - `data/processed/split_class_counts.csv`
 - `data/processed/speaker_counts.csv`
-- `data/processed/speaker_split_overlap.csv`
-- `data/processed/selected_speaker_split_overlap.csv`
-- `data/processed/missing_audio.csv`
-- `data/processed/metadata_issues.csv`
 - `outputs/reports/phase1_dataset_summary.json`
+- `outputs/reports/phase2_preprocessing_summary.json`
 
-Phase 1 dependencies are intentionally small:
+## Environment
 
-- `duckdb` reads metadata and embedded audio from one Parquet shard at a time.
-- `soundfile` decodes both PCM and IEEE-float source WAV files.
-- `soxr` performs reliable 16 kHz resampling.
-- `numpy` handles mono conversion and sample clipping.
-
-Using the Python standard library alone is insufficient because it cannot read
-Parquet and rejects IEEE-float WAV input.
-
-## Local Environment
-
-Use a local uv virtual environment in the repository:
+Create and install the local environment:
 
 ```bash
 uv venv .venv --python 3.10
 uv pip install --python .venv/bin/python -r requirements.txt
 ```
 
-## Automated Pipelines
+Apple Silicon training uses PyTorch MPS when the script is run from a normal
+Terminal window. Codex sandboxed commands may not expose the Metal device even
+when the machine supports MPS.
 
-Run metadata acquisition and audio preprocessing in order:
+## Data Pipeline
+
+Run metadata acquisition and preprocessing:
 
 ```bash
-scripts/data.sh
+scripts/data.sh --overwrite
 ```
 
-Customize the balanced download subset and data budget:
+Useful options:
 
 ```bash
 scripts/data.sh \
-  --max-data-bytes 1000000000 \
-  --train-per-label 100 \
-  --valid-per-label 15 \
-  --test-per-label 15 \
+  --max-data-bytes 10000000000 \
+  --train-per-label 4000 \
+  --valid-per-label 500 \
+  --test-per-label 500 \
   --seed 42 \
   --overwrite
 ```
 
-Use `scripts/data.sh --metadata-only` to prepare metadata without downloading or
-preprocessing audio.
-
-Run all training experiments and final evaluation in order:
+Metadata-only mode:
 
 ```bash
-scripts/train.sh --device auto
+scripts/data.sh --metadata-only
 ```
 
-Both scripts refuse to overwrite existing outputs by default. Pass
-`--overwrite` only when the artifacts should be regenerated:
-
-```bash
-scripts/data.sh --overwrite
-scripts/train.sh --device mps --overwrite
-```
-
-Set `PYTHON_BIN` to use a different Python executable. When PhoWhisper is
-already cached, `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` keeps training
-offline.
-
-## Phase 2: Audio Preprocessing
-
-Phase 2 turns the selected Phase 1 audio into fixed-length waveforms shared by
-training and future inference:
-
-- load audio with SoundFile;
-- convert to mono;
-- resample to 16 kHz when needed;
-- trim leading/trailing silence;
-- normalize RMS volume;
-- center-crop or zero-pad to exactly 16 seconds.
-
-Run:
+Run preprocessing directly:
 
 ```bash
 .venv/bin/python -m src.data.preprocess_audio --overwrite
 ```
 
-Generated outputs:
+## Training Commands
 
-- `data/processed/audio_preprocessed_16s/`
-- `data/processed/preprocessed_metadata.csv`
-- `data/processed/preprocess_audio_issues.csv`
-- `outputs/reports/phase2_preprocessing_summary.json`
-
-The current run preprocessed 390/390 selected files with 0 issues. Every output
-file is mono, 16 kHz, and 256,000 samples.
-
-## Phase 3: Minimal Data EDA
-
-The current Phase 3 report is intentionally minimal and validates the data
-needed before the traditional baseline:
-
-- `outputs/reports/data_eda.md`
-
-It confirms the balanced 100/15/15 per-class split and fixed 16-second output
-duration. Full plots are deferred.
-
-## Phase 4: MFCC Baselines
-
-Phase 4 trains traditional models from MFCC mean/std features:
-
-- Logistic Regression;
-- SVM.
-
-Run:
+Run the core MVP training pipeline:
 
 ```bash
-.venv/bin/python -m src.training.train_baseline --overwrite
+scripts/train.sh --device mps --overwrite
 ```
 
-Generated outputs:
-
-- `outputs/metrics/baseline_results.json`
-- `outputs/metrics/*_confusion_matrix.csv`
-- `outputs/models/logistic_regression_mfcc.pkl`
-- `outputs/models/svm_mfcc.pkl`
-- `outputs/reports/phase4_baseline_report.md`
-
-Current validation results:
-
-| Model | Accuracy | Macro F1 |
-| --- | ---: | ---: |
-| Logistic Regression | 0.6000 | 0.5981 |
-| SVM | 0.6889 | 0.6918 |
-
-`scikit-learn` is used only for the Phase 4 model and metric implementations.
-MFCC extraction is implemented locally with NumPy.
-
-## Phase 5: Lightweight CNN
-
-Phase 5 trains a small CNN from standardized log-Mel spectrograms. The feature
-extractor is implemented with NumPy and reuses the Phase 4 spectrogram/Mel
-helpers, while model training uses PyTorch.
-
-Install/update dependencies:
+Run E3 and E5 on Apple MPS:
 
 ```bash
-uv pip install --python .venv/bin/python -r requirements.txt
+scripts/train_e3_e5_mps.sh --overwrite
 ```
 
-Run with automatic device selection. On Apple Silicon, `auto` prioritizes
-PyTorch MPS, then CUDA, then CPU:
+Run E6 original Whisper-base on Apple MPS:
 
 ```bash
-.venv/bin/python -m src.training.train_cnn --overwrite
+scripts/train_e6_whisper_mps.sh --overwrite
 ```
 
-Device can also be selected explicitly:
+Smoke-test the heavier scripts on a tiny subset:
 
 ```bash
-.venv/bin/python -m src.training.train_cnn --overwrite --device mps
-.venv/bin/python -m src.training.train_cnn --overwrite --device cuda
-.venv/bin/python -m src.training.train_cnn --overwrite --device cpu
+scripts/train_e3_e5_mps.sh --overwrite --smoke
+scripts/train_e6_whisper_mps.sh --overwrite --smoke
 ```
 
-For CUDA, install the CUDA-enabled PyTorch wheel that matches the target machine
-from the official PyTorch selector before using `--device cuda`.
+## Current Model Results
 
-Generated outputs:
+The table below is generated from the current local artifacts under
+`outputs/metrics/`. Model selection should use validation macro F1; test metrics
+are reported for final comparison only.
 
-- `outputs/metrics/cnn_results.json`
-- `outputs/metrics/cnn_training_log.csv`
-- `outputs/metrics/cnn_valid_confusion_matrix.csv`
-- `outputs/metrics/cnn_test_confusion_matrix.csv`
-- `outputs/models/lightweight_cnn_logmel.pt`
-- `outputs/reports/phase5_cnn_report.md`
+| Model | Input | Status | Device | Valid Acc | Valid Macro F1 | Test Acc | Test Macro F1 | Size MB | Latency ms/sample |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Logistic Regression | MFCC mean/std | trained | CPU | 0.5617 | 0.5612 | 0.5466 | 0.5463 | 0.002 | N/A |
+| SVM | MFCC mean/std | trained | CPU | 0.5686 | 0.5688 | 0.5590 | 0.5592 | 1.783 | N/A |
+| Lightweight CNN | Log-Mel | trained | MPS | 0.6091 | 0.6052 | 0.6187 | 0.6115 | 0.099 | N/A |
+| E1 MobileNetV3-style | Log-Mel | trained | MPS | 0.6783 | 0.6719 | 0.6996 | 0.6941 | 0.202 | 152.69 |
+| E2 EfficientNet-B0-style | Log-Mel | trained | MPS | 0.7188 | 0.7127 | 0.7003 | 0.6932 | 0.515 | 85.93 |
+| E3 wav2vec2 Vietnamese | Waveform | trained | MPS | 0.6337 | 0.6063 | 0.6180 | 0.5809 | 1441.515 | 216.61 |
+| E4 PhoWhisper-base frozen encoder | Whisper features | reused | MPS | 0.8477 | 0.8474 | 0.8368 | 0.8348 | 79.085 | 79.08 |
+| E5 ChunkFormer-style local model | Waveform | trained | MPS | 0.6372 | 0.6286 | 0.6427 | 0.6330 | 1.634 | 27.55 |
+| E6 Whisper-base original frozen encoder | Whisper features | trained | MPS | 0.8244 | 0.8229 | 0.8189 | 0.8163 | 79.084 | 86.29 |
 
-The checkpoint under `outputs/models/` is intentionally ignored by Git. Metrics
-and reports are small text artifacts and can be versioned.
+Current best model by validation macro F1 is E4 PhoWhisper-base frozen encoder
+with validation macro F1 `0.8474` and test macro F1 `0.8348`.
 
-Current CNN results from the local run:
+Important notes:
 
-| Split | Accuracy | Macro F1 |
-| --- | ---: | ---: |
-| Train | 0.7900 | 0.7846 |
-| Validation | 0.4222 | 0.4339 |
-| Test | 0.6667 | 0.6668 |
+- E1 and E2 are PyTorch-only MobileNet/EfficientNet-inspired classifiers; they
+  do not use `torchvision` pretrained ImageNet weights.
+- E3 uses frozen Vietnamese wav2vec2 embeddings plus a classifier head.
+- E4 reuses the Phase 6 PhoWhisper-base frozen-encoder run.
+- E5 is a local ChunkFormer-style waveform model, not an official ViP-VL or
+  ChunkFormer pretrained checkpoint.
+- E6 uses original `openai/whisper-base` with the same frozen-encoder
+  comparison setup as PhoWhisper-base.
+- PhoWhisper full fine-tuning exists as a smaller older run
+  (`outputs/metrics/phowhisper_results.json`): validation macro F1 `0.6623`,
+  test macro F1 `0.7113`, using 300/45/45 train/valid/test rows.
 
-The current environment selected `cpu` because PyTorch reported both MPS and
-CUDA as unavailable. The script will still use MPS or CUDA automatically when
-the installed PyTorch build exposes those devices.
+Comparison artifacts:
 
-## Phase 6: PhoWhisper-base Experiments
+- `outputs/metrics/model_method_comparison.csv`
+- `outputs/figures/model_method_comparison_metrics.png`
+- `outputs/figures/model_method_comparison_tradeoffs.png`
+- `outputs/metrics/deep_learning_comparison.csv`
+- `outputs/figures/deep_learning_comparison.png`
+- `outputs/reports/extended_deep_learning_experiments.md`
 
-Phase 6 compares two uses of the same `vinai/PhoWhisper-base` checkpoint. The
-pretrained baseline freezes the encoder and trains only the projector/classifier
-head. The fine-tuned experiment updates the complete encoder/classification
-stack. Both use `WhisperForAudioClassification` and do not run ASR generation.
+## Model Artifacts
 
-The frozen baseline is not zero-shot: the original ASR checkpoint has no
-Northern/Central/Southern output head, so a small supervised head is required.
+Important checkpoints are written under `outputs/models/`:
 
-Run the pretrained frozen-encoder baseline:
+- `logistic_regression_mfcc.pkl`
+- `svm_mfcc.pkl`
+- `lightweight_cnn_logmel.pt`
+- `e1_mobilenetv3_logmel.pt`
+- `e2_efficientnetb0_logmel.pt`
+- `e3_wav2vec2_classifier.pt`
+- `phowhisper_pretrained_frozen_encoder.pt`
+- `e5_vipvl_chunkformer_classifier.pt`
+- `e6_whisper_base_frozen_encoder.pt`
 
-```bash
-.venv/bin/python -m src.training.train_phowhisper \
-  --training-mode frozen_encoder \
-  --learning-rate 1e-3 \
-  --max-epochs 20 \
-  --patience 5 \
-  --overwrite \
-  --device auto
-```
+The Hugging Face cache is under `outputs/models/hf_cache/`.
 
-Run full fine-tuning:
+## App And Inference
 
-```bash
-.venv/bin/python -m src.training.train_phowhisper \
-  --training-mode full_fine_tune \
-  --overwrite \
-  --device auto
-```
-
-The frozen run writes `phowhisper_pretrained_*` artifacts, including:
-
-- `outputs/metrics/phowhisper_pretrained_results.json`
-- `outputs/metrics/phowhisper_pretrained_training_log.csv`
-- `outputs/metrics/phowhisper_pretrained_test_predictions.csv`
-- `outputs/models/phowhisper_pretrained_frozen_encoder.pt`
-- `outputs/reports/phase6_phowhisper_pretrained_report.md`
-
-The fine-tuned run keeps the existing artifact names:
-
-- `outputs/metrics/phowhisper_results.json`
-- `outputs/metrics/phowhisper_training_log.csv`
-- `outputs/metrics/phowhisper_valid_confusion_matrix.csv`
-- `outputs/metrics/phowhisper_test_confusion_matrix.csv`
-- `outputs/metrics/phowhisper_test_predictions.csv`
-- `outputs/models/phowhisper_dialect.pt`
-- `outputs/reports/phase6_phowhisper_report.md`
-
-Current local comparison:
-
-| Model | Validation Macro F1 | Test Macro F1 | Device |
-| --- | ---: | ---: | --- |
-| PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 | MPS |
-| PhoWhisper fine-tuned | 0.6623 | 0.7113 | MPS |
-
-The frozen encoder was verified unchanged against the downloaded checkpoint;
-only 132,099 of 20,722,691 classifier-model parameters were trainable. Local
-checkpoints are ignored by Git.
-
-## Phase 7: Final Evaluation And Error Analysis
-
-Phase 7 compares all available models and analyzes errors for the best model by
-validation macro F1.
-
-Run:
-
-```bash
-.venv/bin/python -m src.evaluation.final_evaluation --overwrite
-```
-
-Generated outputs:
-
-- `outputs/metrics/final_comparison.csv`
-- `outputs/metrics/final_sample_errors.csv`
-- `outputs/reports/error_analysis.md`
-- `outputs/reports/neural_model_comparison.md`
-
-Current best model by validation macro F1 is still the Phase 4 SVM baseline:
-
-| Model | Validation Macro F1 | Test Macro F1 |
-| --- | ---: | ---: |
-| Logistic Regression | 0.5981 | 0.6292 |
-| SVM | 0.6918 | 0.6264 |
-| Lightweight CNN | 0.4339 | 0.6668 |
-| PhoWhisper pretrained, frozen encoder | 0.6720 | 0.7972 |
-| PhoWhisper fine-tuned | 0.6623 | 0.7113 |
-
-## Phase 8: Selectable Inference And FastAPI App
-
-Phase 8 serves trained dialect classifiers through a Python inference module,
-JSON API, and minimal browser interface. The app defaults to the lightweight
-CNN, and the browser also lets the user choose the SVM MFCC baseline or
-PhoWhisper when the local artifacts are available. Inference imports the same
-Phase 2 `preprocess_file()`, Phase 4 `mfcc_mean_std()`, Phase 5
-`log_mel_spectrogram()`, and Phase 6 PhoWhisper feature extraction conventions
-used for training.
-
-Install dependencies:
-
-```bash
-uv pip install --python .venv/bin/python -r requirements.txt
-```
-
-Run the app with the default model selection:
+Run the FastAPI app:
 
 ```bash
 .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
-Override model artifacts, default model, or device when needed:
+Open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+Available API endpoints:
+
+- `GET /models`
+- `GET /health`
+- `POST /predict` with multipart form fields `file` and `model`
+
+Supported app model names are:
+
+- `cnn`
+- `svm`
+- `phowhisper`
+
+Override app artifacts and devices:
 
 ```bash
 DEFAULT_MODEL=cnn \
@@ -366,27 +236,40 @@ PHOWHISPER_DEVICE=auto \
 .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
-`CNN_DEVICE=auto` and `PHOWHISPER_DEVICE=auto` prefer CUDA, then Apple MPS, then
-CPU. The PhoWhisper option defaults to the frozen-encoder checkpoint
-`outputs/models/phowhisper_pretrained_frozen_encoder.pt`; set
-`PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_dialect.pt` only when you
-want the fine-tuned checkpoint. PhoWhisper uses local Hugging Face cache files
-by default; set `PHOWHISPER_LOCAL_FILES_ONLY=0` only in an environment where
-network access is intended. Open `http://127.0.0.1:8000/`; model metadata is available at
-`/models`, health information is available at `/health`, and multipart audio
-prediction is available at `POST /predict` with form fields `file` and `model`
-where `model` is one of `cnn`, `svm`, or `phowhisper`.
-The browser page can also play or pause the selected local audio before sending
-it for prediction; playback stays in the browser.
+The app predicts only the three regional labels. It does not infer identity,
+hometown, ethnicity, or personal background. Confidence values are uncalibrated:
+CNN/PhoWhisper use softmax scores, and SVM uses a decision-margin display score.
 
-Run the read-only CPU inference smoke test:
+## Verification
+
+Focused tests:
 
 ```bash
-.venv/bin/python -m unittest tests.test_inference -v
+.venv/bin/python -m unittest tests.test_phowhisper tests.test_extended_deep_learning -v
+.venv/bin/python -m unittest tests.test_inference tests.test_app -v
 ```
 
-Model artifacts under `outputs/models/` must exist locally. CNN and PhoWhisper
-return softmax confidence; SVM returns a softmax-normalized decision-margin score
-for display only. All confidence values are uncalibrated, and the app predicts
-only the three regional labels—it does not infer identity, hometown, ethnicity,
-or background.
+Full test suite:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+Compile check:
+
+```bash
+.venv/bin/python -m compileall -q src tests
+```
+
+## Dependencies
+
+Core dependencies are intentionally small:
+
+- `numpy` for feature and waveform arrays.
+- `soundfile` for audio loading/writing.
+- `soxr` for 16 kHz resampling.
+- `duckdb` for ViMD Parquet metadata/audio extraction.
+- `scikit-learn` for MFCC baselines and metrics.
+- `torch` for neural training.
+- `transformers` for wav2vec2, PhoWhisper, and Whisper-base checkpoints.
+- `fastapi` and `uvicorn` for the local web app.

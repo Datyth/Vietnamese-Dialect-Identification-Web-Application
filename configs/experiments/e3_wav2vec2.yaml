@@ -1,0 +1,21 @@
+experiment_name: e3_wav2vec2_vietnamese
+phase: phase9_extended_deep_learning_experiments
+mode: full
+model_name: nguyenvulebinh/wav2vec2-base-vietnamese-250h
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+pooling: mean
+freeze_encoder_epochs: 5
+fine_tune_last_n_layers: 4
+batch_size: 4
+learning_rate_head: 1e-3
+learning_rate_encoder: 1e-5
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+training_mode: frozen_encoder_offline_embeddings
+allow_download: true
+notes: downloads the lightweight Vietnamese wav2vec2 base checkpoint when not cached and trains only a classifier head with batch size 4

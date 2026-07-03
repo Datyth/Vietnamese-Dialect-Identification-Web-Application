@@ -168,7 +168,597 @@ Phần này chia project thành các phase nhỏ để dễ triển khai, kiểm
 - Inference latency hiển thị trong app.
 - Disclaimer trong app.
 
-### Phase 9: Final report, reproducibility and cleanup
+
+### Phase 9: Extended Deep Learning Experiments
+
+**Scope**
+
+* Thực nghiệm thêm các mô hình deep learning từ E1 đến E5 để so sánh với baseline truyền thống và lightweight CNN chính.
+* Mục tiêu là đánh giá trade-off giữa:
+
+  * Accuracy.
+  * Macro F1.
+  * Per-class F1.
+  * Model size.
+  * Inference latency.
+  * Khả năng deploy thực tế.
+* Các experiment trong phase này chỉ được thực hiện sau khi MVP đã hoàn thành.
+* Không để phase này block final report nếu thiếu GPU, dependency conflict hoặc pretrained model khó setup.
+* Không thêm class mới ngoài 3 nhãn: Northern, Central, Southern.
+
+---
+
+#### Shared experimental setup
+
+Tất cả experiment E1–E5 cần dùng chung setup để kết quả so sánh công bằng.
+
+**Data setup**
+
+* Dùng cùng `metadata_clean.csv`.
+* Dùng cùng train/validation/test split.
+* Không để speaker overlap giữa train, validation và test nếu dataset có speaker ID.
+* Input audio được chuẩn hóa giống pipeline chính:
+
+  * Mono.
+  * Sample rate 16 kHz.
+  * Fixed duration, ví dụ 10s hoặc 16s.
+  * Normalize volume.
+  * Trim hoặc pad audio.
+
+**Evaluation metrics**
+
+Mỗi model cần báo cáo:
+
+* Accuracy.
+* Macro F1.
+* Precision, recall, F1 theo từng class.
+* Confusion matrix.
+* Model size.
+* Average inference latency.
+* Training time nếu đo được.
+
+**Output format**
+
+```text
+outputs/
+  metrics/
+    e1_mobilenetv3_results.json
+    e2_efficientnetb0_results.json
+    e3_wav2vec2_results.json
+    e4_phowhisper_results.json
+    e5_vipvl_chunkformer_results.json
+    e6_whisper_base_results.json
+    deep_learning_comparison.csv
+
+  figures/
+    e1_mobilenetv3_confusion_matrix.png
+    e2_efficientnetb0_confusion_matrix.png
+    e3_wav2vec2_confusion_matrix.png
+    e4_phowhisper_confusion_matrix.png
+    e5_vipvl_chunkformer_confusion_matrix.png
+    e6_whisper_base_confusion_matrix.png
+    deep_learning_comparison.png
+
+  reports/
+    extended_deep_learning_experiments.md
+```
+
+---
+
+#### E1: Log-Mel Spectrogram + MobileNetV3-Small
+
+**Goal**
+
+Xây dựng một deep learning baseline nhẹ, dễ train và dễ deploy bằng cách dùng log-Mel spectrogram như ảnh 2D.
+
+**Model pipeline**
+
+```text
+Audio
+→ Audio Preprocessing
+→ Log-Mel Spectrogram
+→ MobileNetV3-Small
+→ Global Average Pooling
+→ Linear Classifier
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Input feature: log-Mel spectrogram.
+* Model backbone: MobileNetV3-Small.
+* Pretraining:
+
+  * Option 1: ImageNet pretrained weights.
+  * Option 2: train from scratch nếu muốn tránh domain mismatch.
+* Classifier head:
+
+  * Dropout.
+  * Linear layer.
+  * Softmax over 3 classes.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e1_mobilenetv3_logmel
+feature: log_mel_spectrogram
+model: mobilenetv3_small
+sample_rate: 16000
+duration_sec: 16
+n_mels: 64
+n_fft: 1024
+hop_length: 512
+num_classes: 3
+batch_size: 16
+learning_rate: 1e-4
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 50
+early_stopping_patience: 8
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/features/logmel.py`.
+* `src/models/mobilenetv3_classifier.py`.
+* `src/training/train_e1_mobilenetv3.py`.
+* `configs/experiments/e1_mobilenetv3.yaml`.
+* `outputs/metrics/e1_mobilenetv3_results.json`.
+* Confusion matrix.
+* Learning curve.
+* Model size and latency estimate.
+
+---
+
+#### E2: Log-Mel Spectrogram + EfficientNet-B0
+
+**Goal**
+
+Thử một CNN mạnh hơn MobileNetV3 nhưng vẫn tương đối nhẹ để kiểm tra xem tăng capacity có cải thiện performance không.
+
+**Model pipeline**
+
+```text
+Audio
+→ Audio Preprocessing
+→ Log-Mel Spectrogram
+→ EfficientNet-B0
+→ Global Average Pooling
+→ Linear Classifier
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Input feature: log-Mel spectrogram.
+* Model backbone: EfficientNet-B0.
+* Pretraining:
+
+  * Có thể dùng ImageNet pretrained weights.
+  * Nếu dùng spectrogram 1 channel, có thể:
+
+    * Repeat thành 3 channels.
+    * Hoặc sửa first convolution để nhận 1 channel.
+* Classifier head:
+
+  * Dropout.
+  * Linear layer.
+  * Softmax over 3 classes.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e2_efficientnetb0_logmel
+feature: log_mel_spectrogram
+model: efficientnet_b0
+sample_rate: 16000
+duration_sec: 16
+n_mels: 64
+n_fft: 1024
+hop_length: 512
+num_classes: 3
+input_channels: 3
+batch_size: 16
+learning_rate: 1e-4
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 50
+early_stopping_patience: 8
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/models/efficientnet_classifier.py`.
+* `src/training/train_e2_efficientnet.py`.
+* `configs/experiments/e2_efficientnetb0.yaml`.
+* `outputs/metrics/e2_efficientnetb0_results.json`.
+* Confusion matrix.
+* Learning curve.
+* Model size and latency estimate.
+
+---
+
+#### E3: wav2vec2 Vietnamese Encoder + Classifier
+
+**Goal**
+
+Đánh giá pretrained speech encoder cho tiếng Việt, dùng acoustic representation học sẵn thay vì chỉ train CNN từ spectrogram.
+
+**Model pipeline**
+
+```text
+Audio
+→ Audio Preprocessing
+→ wav2vec2 Vietnamese Encoder
+→ Mean Pooling / Attention Pooling
+→ Classifier Head
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Model chính: `wav2vec2-base-vietnamese-250h` hoặc checkpoint wav2vec2 tiếng Việt tương đương.
+* Bỏ ASR/CTC head.
+* Dùng encoder output làm representation.
+* Gắn classifier head cho 3-class classification.
+
+**Training strategy**
+
+Stage 1:
+
+* Freeze encoder.
+* Train classifier head.
+
+Stage 2:
+
+* Unfreeze một số layer cuối nếu GPU cho phép.
+* Fine-tune với learning rate nhỏ.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e3_wav2vec2_vietnamese
+model_name: wav2vec2_base_vietnamese
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+pooling: mean
+freeze_encoder_epochs: 5
+fine_tune_last_n_layers: 4
+batch_size: 4
+learning_rate_head: 1e-3
+learning_rate_encoder: 1e-5
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/models/wav2vec2_classifier.py`.
+* `src/training/train_e3_wav2vec2.py`.
+* `configs/experiments/e3_wav2vec2.yaml`.
+* `outputs/metrics/e3_wav2vec2_results.json`.
+* Confusion matrix.
+* Classification report.
+* Model size and latency estimate.
+
+---
+
+#### E4: PhoWhisper-base Encoder + Classifier
+
+**Goal**
+
+Đánh giá PhoWhisper-base cho Vietnamese dialect classification, tận dụng pretrained model đã thích nghi tốt hơn với tiếng Việt so với Whisper gốc.
+
+**Model pipeline**
+
+```text
+Audio
+→ PhoWhisper Feature Extractor
+→ PhoWhisper Encoder
+→ Mean Pooling / Attention Pooling
+→ Classifier Head
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Model chính: `vinai/PhoWhisper-base`.
+* Chỉ dùng encoder.
+* Không dùng decoder để sinh transcript.
+* Không dùng speech-to-text output làm feature chính.
+* Gắn classifier head cho 3 classes.
+
+**Training strategy**
+
+Option A: frozen encoder
+
+* Freeze PhoWhisper encoder.
+* Train classifier head.
+* Phù hợp khi GPU yếu.
+
+Option B: partial fine-tuning
+
+* Unfreeze 2–4 layer cuối.
+* Fine-tune với learning rate nhỏ.
+* Chỉ làm nếu frozen encoder chưa đủ tốt và còn compute.
+
+Option C: offline embedding extraction
+
+* Extract embedding từ PhoWhisper encoder.
+* Lưu embedding ra file.
+* Train Logistic Regression hoặc MLP nhỏ trên embedding.
+* Dùng khi không đủ GPU để end-to-end training.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e4_phowhisper_base
+model_name: vinai_phowhisper_base
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+pooling: mean
+freeze_encoder_epochs: 5
+fine_tune_last_n_layers: 4
+batch_size: 4
+learning_rate_head: 1e-3
+learning_rate_encoder: 5e-6
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/models/phowhisper_classifier.py`.
+* `src/features/extract_phowhisper_embeddings.py` nếu dùng embedding mode.
+* `src/training/train_e4_phowhisper.py`.
+* `configs/experiments/e4_phowhisper_base.yaml`.
+* `outputs/metrics/e4_phowhisper_results.json`.
+* Confusion matrix.
+* Classification report.
+* Model size and latency estimate.
+
+---
+
+#### E5: ViP-VL / ChunkFormer Encoder + Classifier
+
+**Goal**
+
+Thử một pretrained speech encoder mới hơn cho tiếng Việt, ưu tiên performance cao. Experiment này là stretch vì setup có thể phức tạp hơn wav2vec2 và PhoWhisper.
+
+**Model pipeline**
+
+```text
+Audio
+→ Audio Preprocessing
+→ ViP-VL / ChunkFormer Encoder
+→ Pooling
+→ Classifier Head
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Model chính: ViP-VL hoặc ChunkFormer encoder nếu checkpoint và code có thể chạy ổn định.
+* Chỉ dùng encoder representation cho classification.
+* Không dùng ASR transcript làm feature chính.
+* Nếu không thể fine-tune trực tiếp:
+
+  * Extract embedding offline.
+  * Train classifier nhỏ trên embedding.
+
+**Training strategy**
+
+Stage 1:
+
+* Freeze encoder.
+* Train classifier head.
+
+Stage 2:
+
+* Partial fine-tuning nếu dependency, GPU và codebase ổn định.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e5_vipvl_chunkformer
+model_name: vipvl_chunkformer_encoder
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+pooling: mean
+freeze_encoder_epochs: 5
+fine_tune_last_n_layers: 4
+batch_size: 4
+learning_rate_head: 1e-3
+learning_rate_encoder: 5e-6
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/models/vipvl_chunkformer_classifier.py`.
+* `src/features/extract_vipvl_embeddings.py` nếu dùng embedding mode.
+* `src/training/train_e5_vipvl_chunkformer.py`.
+* `configs/experiments/e5_vipvl_chunkformer.yaml`.
+* `outputs/metrics/e5_vipvl_chunkformer_results.json`.
+* Confusion matrix.
+* Classification report.
+* Model size and latency estimate.
+* Ghi chú rõ ràng nếu không chạy được do checkpoint, dependency hoặc compute.
+
+---
+
+#### E6: Original Whisper-base Encoder + Classifier
+
+**Goal**
+
+So sánh PhoWhisper-base với Whisper-base gốc có kích thước tương đương để kiểm
+tra lợi ích của checkpoint thích nghi tiếng Việt.
+
+**Model pipeline**
+
+```text
+Audio
+→ Whisper Feature Extractor
+→ Whisper-base Encoder
+→ Classification Head
+→ 3 Dialect Classes
+```
+
+**Setup**
+
+* Model chính: `openai/whisper-base`.
+* Dùng cùng setup với PhoWhisper-base frozen encoder để so sánh công bằng.
+* Không dùng transcript ASR làm feature chính.
+
+**Suggested hyperparameters**
+
+```yaml
+experiment_name: e6_whisper_base_original
+model_name: openai/whisper-base
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+training_mode: frozen_encoder
+batch_size: 4
+learning_rate: 1e-4
+weight_decay: 1e-4
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+```
+
+**Expected outputs**
+
+* `src/training/train_e6_whisper.py`.
+* `configs/experiments/e6_whisper_base.yaml`.
+* `outputs/metrics/e6_whisper_base_results.json`.
+* Confusion matrix.
+* Classification report.
+* Model size and latency estimate.
+
+---
+
+#### Final comparison for E1–E6
+
+Sau khi chạy các experiment, tổng hợp kết quả vào một bảng chung. Nếu E6 đã
+được chạy, thêm E6 vào cùng bảng để so sánh Whisper-base gốc với PhoWhisper-base.
+
+**Comparison table columns**
+
+```text
+experiment_id
+model_name
+input_type
+pretrained
+trainable_setting
+accuracy
+macro_f1
+northern_f1
+central_f1
+southern_f1
+model_size_mb
+cpu_latency_ms
+gpu_latency_ms
+notes
+```
+
+**Expected output**
+
+* `outputs/metrics/deep_learning_comparison.csv`.
+* `outputs/reports/extended_deep_learning_experiments.md`.
+
+**Example summary format**
+
+| Experiment | Model                | Input    | Pretrained         | Main purpose                     |
+| ---------- | -------------------- | -------- | ------------------ | -------------------------------- |
+| E1         | MobileNetV3-Small    | Log-Mel  | ImageNet / Scratch | Lightweight CNN baseline         |
+| E2         | EfficientNet-B0      | Log-Mel  | ImageNet / Scratch | Stronger CNN baseline            |
+| E3         | wav2vec2 Vietnamese  | Waveform | Vietnamese speech  | Vietnamese pretrained encoder    |
+| E4         | PhoWhisper-base      | Waveform | Vietnamese Whisper | Robust Vietnamese speech encoder |
+| E5         | ViP-VL / ChunkFormer | Waveform | Vietnamese speech  | High-performance stretch model   |
+
+---
+
+#### Acceptance criteria
+
+**Minimum**
+
+* Chạy được ít nhất E1, E2 và một pretrained encoder trong E3–E5.
+* Có accuracy, macro F1 và confusion matrix.
+* Có bảng so sánh với MFCC baseline và lightweight CNN ở phase trước.
+
+**Good**
+
+* Chạy được E1–E4.
+* Có model size và latency estimate.
+* Có phân tích model nào tốt nhất theo performance và model nào tốt nhất theo deploy.
+
+**Excellent**
+
+* Chạy được đầy đủ E1–E5.
+* Có freeze vs partial fine-tuning comparison cho ít nhất một pretrained model.
+* Có báo cáo rõ trade-off giữa CNN nhỏ và pretrained speech encoder.
+
+---
+
+#### Risks and fallback plan
+
+**Risk 1: GPU không đủ bộ nhớ**
+
+Fallback:
+
+* Giảm batch size.
+* Dùng gradient accumulation.
+* Freeze encoder.
+* Chỉ fine-tune classifier head.
+* Extract embedding offline rồi train classifier nhỏ.
+
+**Risk 2: Pretrained model setup phức tạp**
+
+Fallback:
+
+* Ưu tiên chạy E1–E4 trước.
+* Đưa E5 vào stretch experiment.
+* Ghi rõ lý do nếu không chạy được.
+
+**Risk 3: Pretrained model không tốt hơn CNN**
+
+Fallback:
+
+* Không ép pretrained model là best model.
+* Báo cáo trung thực.
+* Phân tích nguyên nhân có thể do dataset nhỏ, domain mismatch, audio ngắn, label noise hoặc overfitting.
+
+**Risk 4: Latency quá cao để deploy**
+
+Fallback:
+
+* Dùng MobileNetV3 hoặc EfficientNet-B0 làm model deploy.
+* Giữ pretrained model cho phần analysis/performance comparison.
+
+
+
+
+### Phrase 10: Speech to Text realtime using PhoPhister
+
+
+
+### Phase 11: Final report, reproducibility and cleanup
 
 **Scope**
 

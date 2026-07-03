@@ -1,0 +1,20 @@
+experiment_name: e1_mobilenetv3_logmel
+phase: phase9_extended_deep_learning_experiments
+mode: setup
+feature: log_mel_spectrogram
+model: mobilenetv3_small_style
+sample_rate: 16000
+duration_sec: 16
+n_mels: 64
+n_fft: 512
+hop_length: 160
+input_channels: 1
+num_classes: 3
+batch_size: 16
+learning_rate: 1e-4
+weight_decay: 1e-4
+dropout: 0.3
+max_epochs: 50
+early_stopping_patience: 8
+metric_for_best_model: macro_f1
+notes: setup-only PyTorch scaffold; no torchvision/ImageNet dependency

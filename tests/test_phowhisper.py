@@ -8,9 +8,11 @@ from src.training.train_phowhisper import (
     apply_mode_output_defaults,
     configure_trainable_parameters,
     is_mps_available,
+    limit_rows_by_split,
     resolve_device,
     split_rows,
 )
+from src.training.train_e6_whisper import E6_DEFAULT_ARGS
 
 
 class PhoWhisperDeviceTests(unittest.TestCase):
@@ -58,6 +60,27 @@ class PhoWhisperMetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported label"):
             split_rows(rows)
 
+    def test_limit_rows_by_split_keeps_each_split_bounded(self):
+        rows = []
+        for split in ("train", "valid", "test"):
+            for index, label in enumerate(("Northern", "Central", "Southern")):
+                for item in range(3):
+                    rows.append(
+                        {
+                            "sample_id": f"{split}:{index}:{item}",
+                            "source_split": split,
+                            "label": label,
+                        }
+                    )
+        limited = limit_rows_by_split(split_rows(rows), limit_per_split=6)
+
+        for split in ("train", "valid", "test"):
+            self.assertEqual(len(limited[split]), 6)
+            self.assertEqual(
+                {row["label"] for row in limited[split]},
+                {"Northern", "Central", "Southern"},
+            )
+
 
 class PhoWhisperTrainingModeTests(unittest.TestCase):
     def test_frozen_encoder_leaves_only_classification_stack_trainable(self):
@@ -95,6 +118,13 @@ class PhoWhisperTrainingModeTests(unittest.TestCase):
             Path("outputs/metrics/phowhisper_pretrained_results.json"),
         )
         self.assertIn("frozen_encoder", resolved.checkpoint_path.name)
+
+    def test_e6_defaults_use_original_whisper_base_outputs(self):
+        defaults = list(E6_DEFAULT_ARGS)
+
+        self.assertIn("openai/whisper-base", defaults)
+        self.assertIn("e6_whisper_base", defaults)
+        self.assertIn("outputs/metrics/e6_whisper_base_results.json", defaults)
 
 
 if __name__ == "__main__":

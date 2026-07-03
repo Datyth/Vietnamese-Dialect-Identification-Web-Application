@@ -155,6 +155,42 @@ def split_rows(rows: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
     return by_split
 
 
+def balanced_label_quotas(limit: int) -> dict[str, int]:
+    base = limit // len(LABELS)
+    remainder = limit % len(LABELS)
+    return {
+        label: base + (1 if index < remainder else 0)
+        for index, label in enumerate(LABELS)
+    }
+
+
+def limit_rows_by_split(
+    rows_by_split: dict[str, list[dict[str, str]]],
+    limit_per_split: int,
+) -> dict[str, list[dict[str, str]]]:
+    if limit_per_split <= 0:
+        raise ValueError("--limit-per-split must be positive.")
+    limited: dict[str, list[dict[str, str]]] = {}
+    for split, rows in rows_by_split.items():
+        by_label = {label: [] for label in LABELS}
+        for row in rows:
+            by_label[row["label"]].append(row)
+
+        selected: list[dict[str, str]] = []
+        for label, quota in balanced_label_quotas(limit_per_split).items():
+            selected.extend(by_label[label][:quota])
+
+        if len(selected) < min(limit_per_split, len(rows)):
+            selected_ids = {row["sample_id"] for row in selected}
+            for row in rows:
+                if row["sample_id"] not in selected_ids:
+                    selected.append(row)
+                if len(selected) >= limit_per_split:
+                    break
+        limited[split] = selected[:limit_per_split]
+    return limited
+
+
 def load_waveform(row: dict[str, str]) -> np.ndarray:
     path = Path(row["preprocessed_audio_path"])
     if not path.exists():
@@ -454,16 +490,17 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def write_report(path: Path, results: dict[str, Any]) -> None:
     training_mode = results["training"]["mode"]
+    model_label = results.get("model_name") or results["model_id"]
     if training_mode == "frozen_encoder":
-        title = "# Phase 6 PhoWhisper-base Pretrained Encoder Report"
+        title = f"# {model_label} Frozen Encoder Report"
         summary = (
-            "PhoWhisper-base was evaluated as a pretrained frozen-encoder "
+            f"{model_label} was evaluated as a pretrained frozen-encoder "
             "baseline. Only the projector and 3-class classifier head were trained."
         )
     else:
-        title = "# Phase 6 PhoWhisper-base Fine-Tuning Report"
+        title = f"# {model_label} Fine-Tuning Report"
         summary = (
-            "PhoWhisper-base was fine-tuned end-to-end for 3-class dialect "
+            f"{model_label} was fine-tuned end-to-end for 3-class dialect "
             "classification using preprocessed 16 kHz / 16 s audio."
         )
     lines = [
@@ -493,9 +530,9 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
             "## Model Size",
             "",
             f"- Model ID: `{results['model_id']}`.",
-            f"- Published parameter count estimate: {MODEL_PARAMETER_COUNT:,}.",
-            f"- Hugging Face repository size estimate: {MODEL_REPOSITORY_SIZE_MB} MB.",
-            f"- PyTorch weights size estimate: {MODEL_WEIGHTS_SIZE_MB} MB.",
+            f"- Published parameter count estimate for base-size Whisper family: {MODEL_PARAMETER_COUNT:,}.",
+            f"- Hugging Face repository size estimate for base-size checkpoint: {MODEL_REPOSITORY_SIZE_MB} MB.",
+            f"- PyTorch weights size estimate for base-size checkpoint: {MODEL_WEIGHTS_SIZE_MB} MB.",
             f"- Local checkpoint size: {results['model_size_mb']:.2f} MB.",
             "",
         ]
@@ -604,6 +641,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE)
     parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY)
     parser.add_argument("--latency-samples", type=int, default=5)
+    parser.add_argument("--limit-per-split", type=int, default=None)
+    parser.add_argument("--experiment-id", default="")
+    parser.add_argument("--experiment-model-name", default="")
+    parser.add_argument("--experiment-notes", default="")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
@@ -627,6 +668,8 @@ def main() -> None:
         raise ValueError("--max-epochs must be positive.")
     if args.patience <= 0:
         raise ValueError("--patience must be positive.")
+    if args.limit_per_split is not None and args.limit_per_split <= 0:
+        raise ValueError("--limit-per-split must be positive.")
 
     torch = require_torch()
     AutoFeatureExtractor, WhisperForAudioClassification = require_transformers()
@@ -656,6 +699,8 @@ def main() -> None:
 
     rows = read_preprocessed_metadata(args.metadata_path)
     rows_by_split = split_rows(rows)
+    if args.limit_per_split is not None:
+        rows_by_split = limit_rows_by_split(rows_by_split, args.limit_per_split)
     features_by_split: dict[str, np.ndarray] = {}
     labels_by_split: dict[str, np.ndarray] = {}
     for split in SPLITS:
@@ -845,6 +890,21 @@ def main() -> None:
             for split in SPLITS
         },
     }
+    if args.experiment_id:
+        results.update(
+            {
+                "experiment_id": args.experiment_id,
+                "model_name": (
+                    args.experiment_model_name
+                    or f"{args.model_id} encoder + classifier"
+                ),
+                "input_type": "whisper_input_features",
+                "pretrained": args.model_id,
+                "trainable_setting": args.training_mode,
+                "status": "trained",
+                "notes": args.experiment_notes,
+            }
+        )
     write_json(args.metrics_path, results)
     write_report(args.report_path, results)
     print(

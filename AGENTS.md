@@ -46,6 +46,7 @@ deployment, Docker, ONNX export, complex MLOps or monitoring, large
 hyperparameter searches, or multiple pretrained models unless explicitly
 requested.
 
+
 ## Dependencies
 
 Before adding a dependency:
@@ -77,3 +78,14 @@ Do not create empty scaffolding.
 
 The final response must list the summary, files changed, commands run, checks
 performed, report path, and any uncertainty or limitation.
+
+## Commits
+
+* Make small, focused commits. Each commit contains exactly one logical change.
+* Do not bundle unrelated changes (feature + refactor + formatting) in one commit.
+  Split them into separate commits.
+* Commit after each working increment, not as one large batch at the end.
+* Write specific messages: a concise imperative subject (what changed) plus a short
+  body explaining why when it is not obvious. Reference the phase when relevant.
+* Prefer several small reviewable commits over one large diff. Do not mix source
+  changes with generated outputs or data in the same commit.

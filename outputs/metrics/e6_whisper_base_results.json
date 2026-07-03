@@ -1,0 +1,94 @@
+{
+  "phase": "phase6_phowhisper_pretrained_frozen_encoder",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "model_id": "openai/whisper-base",
+  "published_parameter_count": 74000000,
+  "published_repository_size_mb": 294,
+  "published_weights_size_mb": 290,
+  "model_size_mb": 79.0842456817627,
+  "device": "mps",
+  "requested_device": "mps",
+  "seed": 42,
+  "parameter_counts": {
+    "total": 20722691,
+    "trainable": 132099
+  },
+  "feature": {
+    "name": "PhoWhisper/Whisper input_features",
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "input_shape": [
+      80,
+      3000
+    ]
+  },
+  "training": {
+    "mode": "frozen_encoder",
+    "batch_size": 4,
+    "max_epochs": 20,
+    "epochs_completed": 20,
+    "patience": 5,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "training_log_path": "outputs/metrics/e6_whisper_base_training_log.csv"
+  },
+  "split_counts": {
+    "train": 10978,
+    "valid": 1458,
+    "test": 1458
+  },
+  "best_epoch": 19,
+  "best_valid_macro_f1": 0.8228537348089547,
+  "checkpoint_path": "outputs/models/e6_whisper_base_frozen_encoder.pt",
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_seconds_per_sample": 0.08628710840130224
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.4106200484365176,
+      "accuracy": 0.8469666605939151,
+      "macro_f1": 0.8438086853466938,
+      "per_class_f1": {
+        "Northern": 0.8782219884271436,
+        "Central": 0.7794452023647113,
+        "Southern": 0.873758865248227
+      }
+    },
+    "valid": {
+      "loss": 0.4440855409832485,
+      "accuracy": 0.8244170096021948,
+      "macro_f1": 0.8228537348089547,
+      "per_class_f1": {
+        "Northern": 0.8654037886340977,
+        "Central": 0.7489270386266095,
+        "Southern": 0.854230377166157
+      },
+      "confusion_matrix_path": "outputs/metrics/e6_whisper_base_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.47731421716173983,
+      "accuracy": 0.8189300411522634,
+      "macro_f1": 0.8162549744186531,
+      "per_class_f1": {
+        "Northern": 0.8741328047571854,
+        "Central": 0.7436182019977803,
+        "Southern": 0.831013916500994
+      },
+      "confusion_matrix_path": "outputs/metrics/e6_whisper_base_test_confusion_matrix.csv",
+      "predictions_path": "outputs/metrics/e6_whisper_base_test_predictions.csv"
+    }
+  },
+  "experiment_id": "e6_whisper_base",
+  "model_name": "Whisper-base original encoder + classifier",
+  "input_type": "whisper_input_features",
+  "pretrained": "openai/whisper-base",
+  "trainable_setting": "frozen_encoder",
+  "status": "trained",
+  "notes": "Original OpenAI Whisper-base checkpoint with the encoder frozen; same base-size family as PhoWhisper-base."
+}

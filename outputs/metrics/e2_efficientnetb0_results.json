@@ -1,0 +1,168 @@
+{
+  "phase": "phase9_extended_deep_learning_experiments",
+  "experiment_id": "e2_efficientnetb0",
+  "model_name": "EfficientNet-B0-style log-Mel classifier",
+  "input_type": "log_mel_spectrogram",
+  "pretrained": "none",
+  "trainable_setting": "all_parameters_trainable",
+  "status": "trained",
+  "run_mode": "full",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "mps",
+  "seed": 42,
+  "split_counts_full_metadata": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "split_counts_used": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "feature": {
+    "name": "log_mel_spectrogram",
+    "n_mels": 64,
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "input_shape": [
+      1,
+      64,
+      1599
+    ],
+    "standardized_per_sample": true
+  },
+  "training": {
+    "batch_size": 4,
+    "max_epochs": 20,
+    "epochs_completed": 17,
+    "patience": 5,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "training_time_minutes": 31.668507936802538,
+    "training_log_path": "outputs/metrics/e2_efficientnetb0_training_log.csv"
+  },
+  "best_epoch": 12,
+  "best_valid_macro_f1": 0.712714423356226,
+  "checkpoint_path": "outputs/models/e2_efficientnetb0_logmel.pt",
+  "confusion_matrix_path": "outputs/figures/e2_efficientnetb0_confusion_matrix.png",
+  "model_size_mb": 0.5152120590209961,
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_milliseconds_per_sample": 85.93287514522672
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.4486087754431221,
+      "accuracy": 0.8297504099107306,
+      "macro_f1": 0.8242941901705138,
+      "per_class": {
+        "Northern": {
+          "precision": 0.7811913696060038,
+          "recall": 0.8983279395900755,
+          "f1": 0.8356748620170598
+        },
+        "Central": {
+          "precision": 0.8610283159463488,
+          "recall": 0.6765222482435597,
+          "f1": 0.7577049180327868
+        },
+        "Southern": {
+          "precision": 0.8602977667493796,
+          "recall": 0.8995848469122989,
+          "f1": 0.8795027904616946
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.8356748620170598,
+        "Central": 0.7577049180327868,
+        "Southern": 0.8795027904616946
+      }
+    },
+    "valid": {
+      "loss": 0.6756593531383449,
+      "accuracy": 0.7187928669410151,
+      "macro_f1": 0.712714423356226,
+      "per_class": {
+        "Northern": {
+          "precision": 0.7092198581560284,
+          "recall": 0.823045267489712,
+          "f1": 0.7619047619047619
+        },
+        "Central": {
+          "precision": 0.7401129943502824,
+          "recall": 0.5379876796714579,
+          "f1": 0.6230677764565993
+        },
+        "Southern": {
+          "precision": 0.7148148148148148,
+          "recall": 0.7958762886597938,
+          "f1": 0.7531707317073171
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7619047619047619,
+        "Central": 0.6230677764565993,
+        "Southern": 0.7531707317073171
+      }
+    },
+    "test": {
+      "loss": 0.7020748649533475,
+      "accuracy": 0.7002743484224966,
+      "macro_f1": 0.693244010942739,
+      "per_class": {
+        "Northern": {
+          "precision": 0.6823734729493892,
+          "recall": 0.8045267489711934,
+          "f1": 0.7384324834749764
+        },
+        "Central": {
+          "precision": 0.7553516819571865,
+          "recall": 0.5071868583162218,
+          "f1": 0.6068796068796068
+        },
+        "Southern": {
+          "precision": 0.6863799283154122,
+          "recall": 0.7896907216494845,
+          "f1": 0.7344199424736337
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7384324834749764,
+        "Central": 0.6068796068796068,
+        "Southern": 0.7344199424736337
+      },
+      "confusion_matrix_path": "outputs/figures/e2_efficientnetb0_confusion_matrix.png"
+    }
+  },
+  "notes": "PyTorch-only EfficientNet-inspired scaffold; ImageNet weights deferred."
+}

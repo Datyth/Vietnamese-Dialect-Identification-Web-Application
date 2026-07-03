@@ -1,0 +1,97 @@
+{
+  "phase": "phase9_extended_deep_learning_experiments",
+  "experiment_id": "e4_phowhisper",
+  "model_name": "PhoWhisper-base encoder + classifier",
+  "input_type": "phowhisper_input_features",
+  "pretrained": "vinai/PhoWhisper-base",
+  "trainable_setting": "frozen_encoder",
+  "status": "reused",
+  "run_mode": "smoke",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "mps",
+  "split_counts_full_metadata": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "split_counts_used": {
+    "train": 10978,
+    "valid": 1458,
+    "test": 1458
+  },
+  "checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
+  "source_metrics_path": "outputs/metrics/phowhisper_pretrained_results.json",
+  "confusion_matrix_path": "outputs/figures/e4_phowhisper_confusion_matrix.png",
+  "model_size_mb": 79.08485794067383,
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_milliseconds_per_sample": 79.08057500608265
+  },
+  "training": {
+    "mode": "reused_phase6_metrics",
+    "training_time_minutes": null,
+    "source_training": {
+      "mode": "frozen_encoder",
+      "batch_size": 4,
+      "max_epochs": 10,
+      "epochs_completed": 10,
+      "patience": 15,
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "training_log_path": "outputs/metrics/phowhisper_pretrained_training_log.csv"
+    }
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.3699606134045355,
+      "accuracy": 0.8613590817999636,
+      "macro_f1": 0.8589689444404915,
+      "per_class_f1": {
+        "Northern": 0.9075916230366492,
+        "Central": 0.79798876072168,
+        "Southern": 0.8713264495631453
+      }
+    },
+    "valid": {
+      "loss": 0.39315687934644467,
+      "accuracy": 0.8477366255144033,
+      "macro_f1": 0.847441785564984,
+      "per_class_f1": {
+        "Northern": 0.8949494949494949,
+        "Central": 0.7884416924664602,
+        "Southern": 0.8589341692789969
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_pretrained_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.4444880313527437,
+      "accuracy": 0.8367626886145405,
+      "macro_f1": 0.8348412190890068,
+      "per_class_f1": {
+        "Northern": 0.8928220255653884,
+        "Central": 0.7727272727272727,
+        "Southern": 0.838974358974359
+      },
+      "confusion_matrix_path": "outputs/metrics/phowhisper_pretrained_test_confusion_matrix.csv",
+      "predictions_path": "outputs/metrics/phowhisper_pretrained_test_predictions.csv"
+    }
+  },
+  "notes": "Reuses existing Phase 6 PhoWhisper metrics/checkpoint by default."
+}

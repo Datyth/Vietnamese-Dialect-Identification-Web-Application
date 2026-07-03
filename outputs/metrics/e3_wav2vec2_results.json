@@ -1,0 +1,169 @@
+{
+  "phase": "phase9_extended_deep_learning_experiments",
+  "experiment_id": "e3_wav2vec2",
+  "model_name": "wav2vec2 Vietnamese encoder + classifier",
+  "input_type": "waveform_16khz",
+  "pretrained": "nguyenvulebinh/wav2vec2-base-vietnamese-250h",
+  "trainable_setting": "frozen_encoder_offline_embeddings_classifier_head",
+  "status": "trained",
+  "run_mode": "full",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "mps",
+  "seed": 42,
+  "split_counts_full_metadata": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "split_counts_used": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "model_id": "nguyenvulebinh/wav2vec2-base-vietnamese-250h",
+  "cache_dir": "outputs/models/hf_cache",
+  "feature": {
+    "name": "wav2vec2_mean_pooled_embedding",
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "duration_sec": 16.0,
+    "embedding_dim": 768,
+    "pooling": "mean"
+  },
+  "training": {
+    "mode": "frozen_encoder_offline_embeddings",
+    "batch_size": 4,
+    "max_epochs": 20,
+    "epochs_completed": 9,
+    "patience": 5,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "training_time_minutes": 37.12821713611665,
+    "training_log_path": "outputs/metrics/e3_wav2vec2_training_log.csv"
+  },
+  "best_epoch": 4,
+  "best_valid_macro_f1": 0.6063436257611304,
+  "checkpoint_path": "outputs/models/e3_wav2vec2_classifier.pt",
+  "encoder_cache_size_mb": 1441.4974460601807,
+  "classifier_checkpoint_size_mb": 0.01756572723388672,
+  "confusion_matrix_path": "outputs/figures/e3_wav2vec2_confusion_matrix.png",
+  "model_size_mb": 1441.5150117874146,
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_milliseconds_per_sample": 216.61367519991472
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.8891838014507244,
+      "accuracy": 0.6489342321005648,
+      "macro_f1": 0.6175426846692734,
+      "per_class": {
+        "Northern": {
+          "precision": 0.6584352642510962,
+          "recall": 0.7694174757281553,
+          "f1": 0.7096132321850516
+        },
+        "Central": {
+          "precision": 0.6713465220165922,
+          "recall": 0.3079625292740047,
+          "f1": 0.42223560104354807
+        },
+        "Southern": {
+          "precision": 0.6339109885781804,
+          "recall": 0.83523611831863,
+          "f1": 0.7207792207792207
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7096132321850516,
+        "Central": 0.42223560104354807,
+        "Southern": 0.7207792207792207
+      }
+    },
+    "valid": {
+      "loss": 0.9296111979193484,
+      "accuracy": 0.6337448559670782,
+      "macro_f1": 0.6063436257611304,
+      "per_class": {
+        "Northern": {
+          "precision": 0.6513274336283186,
+          "recall": 0.757201646090535,
+          "f1": 0.7002854424357755
+        },
+        "Central": {
+          "precision": 0.6728971962616822,
+          "recall": 0.29568788501026694,
+          "f1": 0.4108416547788873
+        },
+        "Southern": {
+          "precision": 0.6067746686303387,
+          "recall": 0.8494845360824742,
+          "f1": 0.7079037800687286
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7002854424357755,
+        "Central": 0.4108416547788873,
+        "Southern": 0.7079037800687286
+      }
+    },
+    "test": {
+      "loss": 0.9847333429966362,
+      "accuracy": 0.6179698216735254,
+      "macro_f1": 0.5809415411964297,
+      "per_class": {
+        "Northern": {
+          "precision": 0.6696914700544465,
+          "recall": 0.7592592592592593,
+          "f1": 0.7116682738669238
+        },
+        "Central": {
+          "precision": 0.6705882352941176,
+          "recall": 0.23408624229979466,
+          "f1": 0.3470319634703196
+        },
+        "Southern": {
+          "precision": 0.5671641791044776,
+          "recall": 0.8618556701030928,
+          "f1": 0.6841243862520459
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7116682738669238,
+        "Central": 0.3470319634703196,
+        "Southern": 0.6841243862520459
+      },
+      "confusion_matrix_path": "outputs/figures/e3_wav2vec2_confusion_matrix.png"
+    }
+  },
+  "notes": "Frozen wav2vec2 Vietnamese encoder with a trainable classifier head; uses offline embedding extraction for lower memory."
+}

@@ -1,0 +1,165 @@
+{
+  "phase": "phase9_extended_deep_learning_experiments",
+  "experiment_id": "e5_vipvl_chunkformer",
+  "model_name": "ViP-VL / ChunkFormer encoder + classifier",
+  "input_type": "waveform_16khz",
+  "pretrained": "not_configured",
+  "trainable_setting": "all_parameters_trainable_from_scratch",
+  "status": "trained",
+  "run_mode": "full",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "mps",
+  "seed": 42,
+  "split_counts_full_metadata": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "split_counts_used": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "feature": {
+    "name": "waveform_16khz",
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "duration_sec": 16.0,
+    "input_shape": [
+      256000
+    ]
+  },
+  "training": {
+    "batch_size": 4,
+    "max_epochs": 20,
+    "epochs_completed": 10,
+    "patience": 5,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.0001,
+    "training_time_minutes": 19.82190125208326,
+    "training_log_path": "outputs/metrics/e5_vipvl_chunkformer_training_log.csv"
+  },
+  "best_epoch": 5,
+  "best_valid_macro_f1": 0.6285591682760187,
+  "checkpoint_path": "outputs/models/e5_vipvl_chunkformer_classifier.pt",
+  "confusion_matrix_path": "outputs/figures/e5_vipvl_chunkformer_confusion_matrix.png",
+  "model_size_mb": 1.6341447830200195,
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_milliseconds_per_sample": 27.551758401386905
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.6821743672061084,
+      "accuracy": 0.7062306431043907,
+      "macro_f1": 0.6922884879672729,
+      "per_class": {
+        "Northern": {
+          "precision": 0.6356466876971609,
+          "recall": 0.8694714131607335,
+          "f1": 0.7343963553530751
+        },
+        "Central": {
+          "precision": 0.7839321357285429,
+          "recall": 0.45989461358313816,
+          "f1": 0.5797047970479705
+        },
+        "Southern": {
+          "precision": 0.7580727831881087,
+          "recall": 0.7675142708873898,
+          "f1": 0.7627643115007736
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.7343963553530751,
+        "Central": 0.5797047970479705,
+        "Southern": 0.7627643115007736
+      }
+    },
+    "valid": {
+      "loss": 0.8021555285158584,
+      "accuracy": 0.6371742112482853,
+      "macro_f1": 0.6285591682760187,
+      "per_class": {
+        "Northern": {
+          "precision": 0.5905044510385756,
+          "recall": 0.8189300411522634,
+          "f1": 0.6862068965517242
+        },
+        "Central": {
+          "precision": 0.7161716171617162,
+          "recall": 0.4455852156057495,
+          "f1": 0.549367088607595
+        },
+        "Southern": {
+          "precision": 0.6528066528066528,
+          "recall": 0.6474226804123712,
+          "f1": 0.650103519668737
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.6862068965517242,
+        "Central": 0.549367088607595,
+        "Southern": 0.650103519668737
+      }
+    },
+    "test": {
+      "loss": 0.8143739642981639,
+      "accuracy": 0.6426611796982168,
+      "macro_f1": 0.6330125851812589,
+      "per_class": {
+        "Northern": {
+          "precision": 0.5915080527086384,
+          "recall": 0.831275720164609,
+          "f1": 0.6911890504704876
+        },
+        "Central": {
+          "precision": 0.7954545454545454,
+          "recall": 0.43121149897330596,
+          "f1": 0.559254327563249
+        },
+        "Southern": {
+          "precision": 0.6320939334637965,
+          "recall": 0.6659793814432989,
+          "f1": 0.6485943775100401
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.6911890504704876,
+        "Central": 0.559254327563249,
+        "Southern": 0.6485943775100401
+      },
+      "confusion_matrix_path": "outputs/figures/e5_vipvl_chunkformer_confusion_matrix.png"
+    }
+  },
+  "notes": "Plain PyTorch ChunkFormer-style waveform classifier; official ViP-VL/ChunkFormer dependency integration is recorded as a limitation."
+}

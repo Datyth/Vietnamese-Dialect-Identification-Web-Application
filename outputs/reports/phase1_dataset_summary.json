@@ -21,47 +21,47 @@
     "Southern": 3469
   },
   "downloaded_class_counts": {
-    "Central": 130,
-    "Northern": 130,
-    "Southern": 130
+    "Central": 4390,
+    "Northern": 4680,
+    "Southern": 4824
   },
   "downloaded_split_counts": {
-    "test": 45,
-    "train": 300,
-    "valid": 45
+    "test": 1458,
+    "train": 10978,
+    "valid": 1458
   },
   "downloaded_split_class_counts": {
-    "train:Northern": 100,
-    "train:Central": 100,
-    "train:Southern": 100,
-    "valid:Northern": 15,
-    "valid:Central": 15,
-    "valid:Southern": 15,
-    "test:Northern": 15,
-    "test:Central": 15,
-    "test:Southern": 15
+    "train:Northern": 3708,
+    "train:Central": 3416,
+    "train:Southern": 3854,
+    "valid:Northern": 486,
+    "valid:Central": 487,
+    "valid:Southern": 485,
+    "test:Northern": 486,
+    "test:Central": 487,
+    "test:Southern": 485
   },
   "source_speaker_split_overlap_count": 2,
-  "selected_speaker_split_overlap_count": 0,
+  "selected_speaker_split_overlap_count": 1,
   "label_mapping": {
     "North": "Northern",
     "Central": "Central",
     "South": "Southern"
   },
   "audio_status_counts": {
-    "downloaded": 390,
-    "not_selected_under_data_budget": 18559
+    "downloaded": 13894,
+    "not_selected_under_data_budget": 5055
   },
-  "downloaded_audio_bytes": 199845320,
-  "data_directory_bytes": 252100349,
-  "max_data_bytes": 1000000000,
+  "downloaded_audio_bytes": 8517763348,
+  "data_directory_bytes": 8769434111,
+  "max_data_bytes": 10000000000,
   "data_cap_respected": true,
   "selection_seed": 42,
   "target_sample_rate": 16000,
   "target_samples_per_label": {
-    "train": 100,
-    "valid": 15,
-    "test": 15
+    "train": 4000,
+    "valid": 500,
+    "test": 500
   },
   "source_note": "Complete metadata is read from official original Parquet shards. The local subset is extracted shard-by-shard, prioritizes shorter files and speaker diversity, and stores mono 16 kHz PCM WAV files under the local byte budget. Source splits are preserved.",
   "dataset_card_record_count": 18949

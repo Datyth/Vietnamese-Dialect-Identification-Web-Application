@@ -4,61 +4,61 @@
   "fixed_duration_seconds": 16.0,
   "target_samples": 256000,
   "output_root": "data/processed/audio_preprocessed_16s",
-  "preprocessed_count": 390,
+  "preprocessed_count": 13894,
   "issue_count": 0,
-  "exact_shape_count": 390,
+  "exact_shape_count": 13894,
   "split_class_counts": [
     {
       "source_split": "train",
       "label": "Northern",
-      "preprocessed_samples": 100
+      "preprocessed_samples": 3708
     },
     {
       "source_split": "train",
       "label": "Central",
-      "preprocessed_samples": 100
+      "preprocessed_samples": 3416
     },
     {
       "source_split": "train",
       "label": "Southern",
-      "preprocessed_samples": 100
+      "preprocessed_samples": 3854
     },
     {
       "source_split": "valid",
       "label": "Northern",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 486
     },
     {
       "source_split": "valid",
       "label": "Central",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 487
     },
     {
       "source_split": "valid",
       "label": "Southern",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 485
     },
     {
       "source_split": "test",
       "label": "Northern",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 486
     },
     {
       "source_split": "test",
       "label": "Central",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 487
     },
     {
       "source_split": "test",
       "label": "Southern",
-      "preprocessed_samples": 15
+      "preprocessed_samples": 485
     }
   ],
   "original_duration_seconds": {
-    "min": 2.51,
-    "median": 15.9409065,
-    "mean": 16.01187181794872,
-    "max": 31.818438
+    "min": 1.054,
+    "median": 19.1171875,
+    "mean": 19.156542420397294,
+    "max": 32.24
   },
   "preprocessed_duration_seconds": {
     "min": 16.0,
@@ -67,15 +67,15 @@
     "max": 16.0
   },
   "preprocessed_rms": {
-    "min": 0.030338,
-    "median": 0.0765615,
-    "mean": 0.07173189743589743,
-    "max": 0.089196
+    "min": 0.020533,
+    "median": 0.077898,
+    "mean": 0.07452800539801353,
+    "max": 0.105277
   },
   "preprocessed_peak": {
-    "min": 0.237183,
-    "median": 0.6066435,
-    "mean": 0.626977,
+    "min": 0.160095,
+    "median": 0.6611785,
+    "mean": 0.6758098738304305,
     "max": 0.990021
   }
 }

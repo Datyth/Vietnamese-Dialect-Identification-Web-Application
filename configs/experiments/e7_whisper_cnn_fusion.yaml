@@ -1,0 +1,42 @@
+experiment_name: e7_whisper_cnn_fusion
+phase: phase10_whisper_cnn_fusion
+mode: full
+model_name: hybrid_frozen_phowhisper_base_frozen_efficientnetb0
+pretrained_encoder: vinai/PhoWhisper-base
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+label_order:
+  - Northern
+  - Central
+  - Southern
+global_branch:
+  encoder: vinai/PhoWhisper-base
+  frozen: true
+  use_decoder: false
+  use_asr_transcripts: false
+  pooling: mean_hidden_state
+local_branch:
+  input: standardized_log_mel_spectrogram
+  cnn: e2_efficientnetb0
+  checkpoint: outputs/models/e2_efficientnetb0_logmel.pt
+  frozen: true
+fusion:
+  default: gated
+  optional: concat
+training_mode: frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head
+batch_size: 4
+learning_rate: 1e-4
+weight_decay: 1e-4
+dropout: 0.0
+local_embedding_dim: 128
+fusion_dim: 256
+max_epochs: 20
+early_stopping_patience: 5
+metric_for_best_model: macro_f1
+primary_analysis:
+  - central_recall
+  - central_f1
+  - central_to_northern_errors
+  - central_to_southern_errors
+notes: predicts only the three dataset-defined regional dialect labels; no hometown, identity, ethnicity, or personal-background inference

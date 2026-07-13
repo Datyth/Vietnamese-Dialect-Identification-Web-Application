@@ -41,6 +41,8 @@ LABELS = ("Northern", "Central", "Southern")
 LABEL_TO_INDEX = {label: index for index, label in enumerate(LABELS)}
 SPLITS = ("train", "valid", "test")
 PHASE = "phase9_extended_deep_learning_experiments"
+PHASE10 = "phase10_whisper_cnn_fusion"
+PHASE10_METRIC_PATH = Path("outputs/metrics/e7_whisper_cnn_fusion_results.json")
 DEFAULT_SEED = 42
 DEFAULT_SMOKE_LIMIT_PER_SPLIT = 9
 DEFAULT_SMOKE_EPOCHS = 1
@@ -1721,6 +1723,7 @@ def collect_method_comparison_rows() -> list[dict[str, Any]]:
     append_cnn_comparison_row(rows, Path("outputs/metrics/cnn_results.json"))
     for spec in EXPERIMENTS.values():
         append_phase9_comparison_row(rows, spec)
+    append_phase10_comparison_row(rows, PHASE10_METRIC_PATH)
     return rows
 
 
@@ -1792,6 +1795,36 @@ def append_phase9_comparison_row(rows: list[dict[str, Any]], spec: ExperimentSpe
             "device": result.get("device", ""),
             "metrics_path": spec.metric_path.as_posix(),
             "notes": result.get("notes", spec.notes),
+        }
+    )
+
+
+def append_phase10_comparison_row(rows: list[dict[str, Any]], path: Path) -> None:
+    result = read_json_or_none(path)
+    if result is None:
+        return
+    metrics = result.get("metrics", {})
+    rows.append(
+        {
+            "method_id": result.get("experiment_id", "e7_whisper_cnn_fusion"),
+            "group": result.get("phase", PHASE10),
+            "input_type": result.get(
+                "input_type",
+                "waveform_16khz_to_whisper_features_and_log_mel",
+            ),
+            "status": result.get("status", ""),
+            "valid_accuracy": metrics.get("valid", {}).get("accuracy"),
+            "valid_macro_f1": metrics.get("valid", {}).get("macro_f1"),
+            "test_accuracy": metrics.get("test", {}).get("accuracy"),
+            "test_macro_f1": metrics.get("test", {}).get("macro_f1"),
+            "model_size_mb": result.get("model_size_mb"),
+            "latency_ms_per_sample": latency_ms_from_result(result),
+            "device": result.get("device", ""),
+            "metrics_path": path.as_posix(),
+            "notes": result.get(
+                "notes",
+                "Hybrid frozen PhoWhisper encoder plus trainable log-Mel CNN branch.",
+            ),
         }
     )
 

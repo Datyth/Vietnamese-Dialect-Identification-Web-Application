@@ -5,7 +5,8 @@ Lightweight Vietnamese speech dialect classification for three regional labels:
 
 The current project state includes metadata preparation, audio preprocessing,
 MFCC baselines, a lightweight CNN, PhoWhisper-base, extended E1-E6 experiments,
-final comparison artifacts, and a FastAPI demo app.
+a Phase 10 hybrid PhoWhisper + CNN fusion experiment scaffold, final comparison
+artifacts, and a FastAPI demo app.
 
 ## Dataset
 
@@ -130,18 +131,29 @@ Run E6 original Whisper-base on Apple MPS:
 scripts/train_e6_whisper_mps.sh --overwrite
 ```
 
+Run Phase 10 E7 hybrid PhoWhisper + CNN fusion on Apple MPS:
+
+```bash
+scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite
+```
+
+Add `--allow-download` only if `vinai/PhoWhisper-base` is not already cached
+under `outputs/models/hf_cache/`.
+
 Smoke-test the heavier scripts on a tiny subset:
 
 ```bash
 scripts/train_e3_e5_mps.sh --overwrite --smoke
 scripts/train_e6_whisper_mps.sh --overwrite --smoke
+scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke
 ```
 
 ## Current Model Results
 
-The table below is generated from the current local artifacts under
-`outputs/metrics/`. Model selection should use validation macro F1; test metrics
-are reported for final comparison only.
+The trained rows below are generated from the current local artifacts under
+`outputs/metrics/`. E7 is listed as the next Phase 10 run until its artifacts
+are generated. Model selection should use validation macro F1; test metrics are
+reported for final comparison only.
 
 | Model | Input | Status | Device | Valid Acc | Valid Macro F1 | Test Acc | Test Macro F1 | Size MB | Latency ms/sample |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -154,6 +166,7 @@ are reported for final comparison only.
 | E4 PhoWhisper-base frozen encoder | Whisper features | reused | MPS | 0.8477 | 0.8474 | 0.8368 | 0.8348 | 79.085 | 79.08 |
 | E5 ChunkFormer-style local model | Waveform | trained | MPS | 0.6372 | 0.6286 | 0.6427 | 0.6330 | 1.634 | 27.55 |
 | E6 Whisper-base original frozen encoder | Whisper features | trained | MPS | 0.8244 | 0.8229 | 0.8189 | 0.8163 | 79.084 | 86.29 |
+| E7 PhoWhisper + CNN fusion | PhoWhisper features + Log-Mel | pending full run | MPS/CUDA/CPU | N/A | N/A | N/A | N/A | N/A | N/A |
 
 Current best model by validation macro F1 is E4 PhoWhisper-base frozen encoder
 with validation macro F1 `0.8474` and test macro F1 `0.8348`.
@@ -168,9 +181,40 @@ Important notes:
   ChunkFormer pretrained checkpoint.
 - E6 uses original `openai/whisper-base` with the same frozen-encoder
   comparison setup as PhoWhisper-base.
+- E7 freezes the PhoWhisper encoder and reuses the trained E2
+  EfficientNetB0-style log-Mel features branch. It trains only the
+  projection/fusion layers and 3-class classifier head. It does not use the
+  decoder or ASR transcripts.
 - PhoWhisper full fine-tuning exists as a smaller older run
   (`outputs/metrics/phowhisper_results.json`): validation macro F1 `0.6623`,
   test macro F1 `0.7113`, using 300/45/45 train/valid/test rows.
+
+## Phase 10 Hybrid PhoWhisper + CNN Fusion
+
+Phase 10 adds `e7_whisper_cnn_fusion`, a local-global research experiment for
+Vietnamese dialect classification. The global branch uses a frozen
+`vinai/PhoWhisper-base` encoder, currently the strongest baseline in this repo,
+and mean-pools encoder hidden states into an utterance-level embedding. The
+local branch converts the same 16 kHz / 16 s waveform into a standardized
+log-Mel spectrogram and passes it through the frozen trained E2
+EfficientNetB0-style features branch to reuse local time-frequency dialect cues.
+
+The default fusion is gated. A concat fusion ablation can be run with:
+
+```bash
+scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --concat
+```
+
+The E7 report focuses on validation/test macro F1 plus Central recall, Central
+F1, and Central-to-Northern / Central-to-Southern confusion. Interpret E7
+against E1/MobileNetV3-style, the Phase 5 CNN, E3 wav2vec2, E4 PhoWhisper, and
+E6 Whisper-base. If Central recall/F1 improves over frozen PhoWhisper-base, the
+frozen EfficientNetB0-style branch likely contributes complementary dialect
+cues. If it does not, the extra fusion path may add complexity and latency
+without useful gain.
+
+E7 predicts only the dataset-defined `Northern`, `Central`, and `Southern`
+labels. It does not infer hometown, identity, ethnicity, or personal background.
 
 Comparison artifacts:
 
@@ -194,6 +238,7 @@ Important checkpoints are written under `outputs/models/`:
 - `phowhisper_pretrained_frozen_encoder.pt`
 - `e5_vipvl_chunkformer_classifier.pt`
 - `e6_whisper_base_frozen_encoder.pt`
+- `e7_whisper_cnn_fusion.pt`
 
 The Hugging Face cache is under `outputs/models/hf_cache/`.
 
@@ -245,6 +290,7 @@ CNN/PhoWhisper use softmax scores, and SVM uses a decision-margin display score.
 Focused tests:
 
 ```bash
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
 .venv/bin/python -m unittest tests.test_phowhisper tests.test_extended_deep_learning -v
 .venv/bin/python -m unittest tests.test_inference tests.test_app -v
 ```

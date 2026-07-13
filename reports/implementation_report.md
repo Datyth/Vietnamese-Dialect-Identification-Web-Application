@@ -1,5 +1,290 @@
 # Implementation Report
 
+## Latest Update: Phase 10 E7 Gated Mode And Bash Hyperparameters
+
+### Task Summary
+
+Changed E7 to use gated fusion as the default mode and updated the MPS runner so
+training hyperparameters can be adjusted directly through environment variables.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Sets default fusion to `gated` and records the correct default in metrics. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Uses gated mode by default, adds `--concat`, validates `FUSION_TYPE`, and exposes more hyperparameter overrides. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Records gated as the default fusion mode. |
+| `PLAN.md`, `README.md` | Updates Phase 10 docs and run command from gated ablation to concat ablation. |
+| `tests/test_whisper_cnn_fusion.py` | Adds coverage for the default gated fusion mode. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- `gated` is now the default in Python, config, README, and bash.
+- `concat` remains available as an explicit ablation via `--concat` or
+  `FUSION_TYPE=concat`.
+- The bash runner now exposes `SEED`, `MODEL_ID`, `CACHE_DIR`,
+  `LOCAL_EMBED_DIM`, `FUSION_DIM`, `FUSION_TYPE`, `SMOKE_LIMIT_PER_SPLIT`, and
+  `SMOKE_EPOCHS`, in addition to the existing training controls.
+- No new dependencies were added.
+
+### Commands Run
+
+```bash
+sed -n '730,820p' PLAN.md
+sed -n '1,260p' scripts/train_e7_whisper_cnn_fusion_mps.sh
+sed -n '502,595p' src/training/train_e7_whisper_cnn_fusion.py
+sed -n '1,80p' configs/experiments/e7_whisper_cnn_fusion.yaml
+rg -n "default concat|default fusion|concat|gated|--gated|--concat|Fusion type" README.md reports/implementation_report.md src/training/train_e7_whisper_cnn_fusion.py tests/test_whisper_cnn_fusion.py
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+scripts/train_e7_whisper_cnn_fusion_mps.sh --help
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.venv/bin/python -m src.training.train_e7_whisper_cnn_fusion --device cpu --limit-per-split 3 --max-epochs 1 --batch-size 1 --patience 1 --latency-samples 1 --checkpoint-path /private/tmp/e7_gated_smoke.pt --metrics-path /private/tmp/e7_gated_smoke_results.json --training-log-path /private/tmp/e7_gated_smoke_log.csv --report-path /private/tmp/e7_gated_smoke_report.md --valid-confusion-path /private/tmp/e7_gated_smoke_valid.csv --test-confusion-path /private/tmp/e7_gated_smoke_test.csv --overwrite
+.venv/bin/python -c "import json; data=json.load(open('/private/tmp/e7_gated_smoke_results.json')); print(data['fusion']['type']); print(data['fusion']['default']); print(data['training']['learning_rate']); print(data['training']['weight_decay']); print(data['training']['batch_size'])"
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Script help | Passed and documents `--concat`, `FUSION_TYPE=gated`, and new hyperparameter overrides. |
+| Python compilation | Passed for `src` and `tests`. |
+| Focused E7 tests | Passed: 8 tests. |
+| Full tests | Passed: 48 tests. |
+| E7 CPU gated smoke | Passed with 3 rows per split, 1 epoch, temp outputs under `/private/tmp`; metrics JSON records `fusion.type=gated` and `fusion.default=gated`. |
+
+### Known Limitations
+
+- Full E7 retraining was not run during this change.
+- Existing E7 metrics are stale until regenerated with the new gated default.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Tune hyperparameters through environment variables if the smoke run is stable.
+3. Run full E7 and optionally run `--concat` as an ablation.
+
+---
+
+## Latest Update: Phase 10 E7 No-Dropout Head
+
+### Task Summary
+
+Changed E7 fusion training to use no dropout by default. When dropout is `0.0`,
+the model now inserts `nn.Identity()` instead of `nn.Dropout`, so the default E7
+head has no dropout modules.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/models/whisper_cnn_fusion.py` | Uses identity layers instead of dropout when dropout is zero. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Sets E7 default dropout to `0.0`. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Sets script default `DROPOUT=0.0` and keeps the override available. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Records `dropout: 0.0`. |
+| `tests/test_whisper_cnn_fusion.py` | Adds coverage that the default E7 model has no `Dropout` modules. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- No new dependencies were added.
+- Existing `--dropout` remains available only as an explicit ablation override.
+- E7 metrics must still be regenerated after this architecture/training change.
+
+### Commands Run
+
+```bash
+sed -n '730,820p' PLAN.md
+rg -n "DROPOUT|dropout|Dropout" src/models/whisper_cnn_fusion.py src/training/train_e7_whisper_cnn_fusion.py scripts/train_e7_whisper_cnn_fusion_mps.sh configs/experiments/e7_whisper_cnn_fusion.yaml tests/test_whisper_cnn_fusion.py README.md reports/implementation_report.md
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+rg -n "dropout: 0\\.25|default: 0\\.25|DEFAULT_DROPOUT = 0\\.25|Dropout\\(p=dropout\\)|# DROPOUT" src/models/whisper_cnn_fusion.py src/training/train_e7_whisper_cnn_fusion.py scripts/train_e7_whisper_cnn_fusion_mps.sh configs/experiments/e7_whisper_cnn_fusion.yaml reports/implementation_report.md README.md PLAN.md
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Stale dropout scan | No E7 default `0.25` or direct `Dropout(p=dropout)` remains. |
+| Focused E7 tests | Passed: 7 tests. |
+| Full tests | Passed: 47 tests. |
+
+### Known Limitations
+
+- Full E7 retraining was not run during this change.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Run full E7 after the smoke run passes.
+
+---
+
+## Latest Update: Phase 10 E7 Frozen EfficientNetB0 Local Branch
+
+### Task Summary
+
+Changed E7 so the local log-Mel branch reuses the trained E2
+EfficientNetB0-style checkpoint instead of training a new CNN from scratch.
+E7 now freezes both PhoWhisper and EfficientNetB0 features, then trains only the
+projection, fusion, and 3-class classification head.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/models/whisper_cnn_fusion.py` | Allows an injected frozen local encoder and keeps it in eval mode. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Loads and validates the E2 checkpoint, freezes EfficientNet features, excludes frozen encoders from E7 checkpoints, and records local-branch metadata. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Requires the E2 checkpoint before running E7 and documents the frozen EfficientNet branch. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Updates E7 config to use frozen `e2_efficientnetb0`. |
+| `PLAN.md`, `README.md` | Clarify that E7 trains only the head/fusion layers. |
+| `tests/test_whisper_cnn_fusion.py` | Covers frozen local-branch behavior and checkpoint filtering. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- No new dependencies were added.
+- The default local checkpoint is `outputs/models/e2_efficientnetb0_logmel.pt`.
+- The E2 checkpoint contract is validated before training: experiment ID,
+  feature type, sample rate, target length, Mel bins, and label order.
+- E7 checkpoints store trainable E7 layers only; they do not duplicate
+  PhoWhisper or EfficientNetB0 weights.
+- Existing E7 metrics are stale after this code change and should be regenerated.
+
+### Commands Run
+
+```bash
+sed -n '1,260p' src/models/efficientnet_classifier.py
+sed -n '1,260p' src/training/train_e2_efficientnet.py
+sed -n '1,220p' tests/test_whisper_cnn_fusion.py
+sed -n '1,120p' PLAN.md
+rg -n "lightweight|checkpoint|load_state_dict|cnn|local_branch|freeze|trainable|state_dict|DEFAULT" src/models/whisper_cnn_fusion.py src/training/train_e7_whisper_cnn_fusion.py configs/experiments/e7_whisper_cnn_fusion.yaml
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+scripts/train_e7_whisper_cnn_fusion_mps.sh --help
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion tests.test_extended_deep_learning -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.venv/bin/python -c "from types import SimpleNamespace; from pathlib import Path; import torch; from src.training.train_e7_whisper_cnn_fusion import load_frozen_efficientnet_encoder; args=SimpleNamespace(cnn_checkpoint_path=Path('outputs/models/e2_efficientnetb0_logmel.pt')); encoder, ckpt = load_frozen_efficientnet_encoder(args, torch.device('cpu')); print(ckpt.get('experiment_id')); print(sum(p.numel() for p in encoder.parameters() if p.requires_grad)); print(tuple(encoder(torch.randn(1,1,64,501)).shape))"
+.venv/bin/python -m src.training.train_e7_whisper_cnn_fusion --device cpu --limit-per-split 3 --max-epochs 1 --batch-size 1 --patience 1 --latency-samples 1 --checkpoint-path /private/tmp/e7_smoke.pt --metrics-path /private/tmp/e7_smoke_results.json --training-log-path /private/tmp/e7_smoke_log.csv --report-path /private/tmp/e7_smoke_report.md --valid-confusion-path /private/tmp/e7_smoke_valid.csv --test-confusion-path /private/tmp/e7_smoke_test.csv --overwrite
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Script help | Passed and documents frozen E2 EfficientNetB0 branch plus `CNN_CHECKPOINT`. |
+| Focused tests | Passed: 14 tests. |
+| Full tests | Passed: 46 tests. |
+| E2 checkpoint load | Passed: experiment `e2_efficientnetb0`, local encoder trainable params `0`, output shape `(1, 128, 1, 1)`. |
+| E7 CPU smoke | Passed with 3 rows per split, 1 epoch, temp outputs under `/private/tmp`; trainable params `168,195/20,880,835`, PhoWhisper trainable `0`, EfficientNet trainable `0`. |
+
+### Known Limitations
+
+- Full E7 retraining was not run during this code change.
+- The existing `outputs/metrics/e7_whisper_cnn_fusion_results.json` describes
+  the previous trainable-CNN implementation until E7 is rerun.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Run full E7 after smoke passes.
+3. Compare the rerun E7 against E2 and E4 before updating final conclusions.
+
+---
+
+## Latest Update: Phase 10 PhoWhisper + CNN Fusion Experiment
+
+### Task Summary
+
+Implemented the Phase 10 E7 hybrid research experiment: a frozen
+`vinai/PhoWhisper-base` encoder branch fused with a trainable log-Mel CNN
+branch for 3-class Vietnamese dialect classification.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `PLAN.md` | Replaces the stale Phrase 10 placeholder with the hybrid PhoWhisper + CNN experiment scope and expected outputs. |
+| `README.md` | Documents Phase 10 PhoWhisper motivation, commands, pending E7 result row, and interpretation guidance. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Records the E7 experiment setup and Central-focused analysis targets. |
+| `src/models/whisper_cnn_fusion.py` | Adds the frozen PhoWhisper/Whisper-family encoder + local CNN fusion classifier with concat and gated fusion. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Adds the Phase 10 training/evaluation runner, metrics JSON, confusion matrices, Central error analysis, and comparison refresh. |
+| `src/training/train_extended_deep_learning.py` | Includes E7 in `model_method_comparison.csv` when E7 metrics exist. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Adds an Apple MPS Terminal runner with batch size 4, smoke mode, gated mode, and optional download. |
+| `tests/test_whisper_cnn_fusion.py` | Adds CPU-safe tests for fusion forward passes, encoder freezing, Central error analysis, and comparison row collection. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- PhoWhisper is used only as a frozen encoder; decoder and ASR transcripts are
+  not used.
+- The default fusion is concat; gated fusion is available via `--gated`.
+- The runner trains only the CNN branch, projection/fusion layers, and
+  classifier head.
+- Feature extraction is on-demand from preprocessed waveforms to avoid storing
+  all Whisper features in RAM on 16 GB machines.
+- Checkpoints store trainable fusion/classifier weights plus metadata, not a
+  duplicate copy of the frozen PhoWhisper encoder.
+- No new dependencies were added; existing `torch`, `transformers`, `numpy`,
+  and `scikit-learn` are sufficient.
+
+### Commands Run
+
+```bash
+sed -n '1,260p' PLAN.md
+rg --files src tests configs scripts reports outputs/reports | sort
+git status --short
+sed -n '1,260p' src/training/train_extended_deep_learning.py
+sed -n '620,1240p' src/training/train_extended_deep_learning.py
+sed -n '1240,2320p' src/training/train_extended_deep_learning.py
+sed -n '1,620p' src/training/train_phowhisper.py
+sed -n '1,520p' src/training/train_cnn.py
+sed -n '1,240p' src/models/cnn.py
+sed -n '1,220p' src/features/logmel.py
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion tests.test_extended_deep_learning -v
+scripts/train_e7_whisper_cnn_fusion_mps.sh --help
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Focused tests | Passed: 13 tests. |
+| Script help | Passed and documents `--overwrite`, `--smoke`, `--gated`, and `--allow-download`. |
+
+### Known Limitations
+
+- Full E7 training was not run in the sandbox. Run
+  `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite` from a normal
+  Terminal to generate real metrics.
+- If `vinai/PhoWhisper-base` is already cached from E4/Phase 6, `--allow-download`
+  can be omitted.
+- The current README lists E7 as pending until
+  `outputs/metrics/e7_whisper_cnn_fusion_results.json` exists.
+
+### Reviewer Priorities
+
+1. Run the E7 smoke command from Terminal:
+   `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Run the full E7 concat experiment, then optionally the gated ablation.
+3. Compare Central recall/F1 and Central confusion errors against E4
+   PhoWhisper-base first, then E6 Whisper-base as the original-Whisper control.
+
+---
+
 ## Latest Update: README Dataset And Training Results
 
 ### Task Summary

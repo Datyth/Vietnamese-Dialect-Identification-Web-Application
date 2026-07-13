@@ -750,11 +750,57 @@ Fallback:
 
 * Dùng MobileNetV3 hoặc EfficientNet-B0 làm model deploy.
 * Giữ pretrained model cho phần analysis/performance comparison.
+### Phase 10: Hybrid PhoWhisper + CNN Fusion Experiment
 
+**Scope**
 
+- Thực nghiệm mô hình hybrid cho phân loại 3 dialect labels: `Northern`,
+  `Central`, `Southern`.
+- Dùng cùng waveform đã preprocess ở 16 kHz, fixed duration 16 giây và cùng
+  train/validation/test split hiện tại.
+- Global branch dùng pretrained `vinai/PhoWhisper-base` encoder, freeze toàn bộ
+  parameters, không dùng decoder và không sinh hoặc dùng ASR transcript. Chọn
+  PhoWhisper vì E4 hiện là baseline tốt nhất trên tập thực nghiệm hiện tại.
+- Local branch dùng log-Mel spectrogram theo style feature extraction hiện tại
+  và phần `features` của E2 EfficientNetB0-style đã train, freeze toàn bộ
+  parameters để giữ cue cục bộ theo miền thời gian-tần số.
+- Fusion mặc định là gated giữa embedding global và local:
+  `z = alpha * z_global + (1 - alpha) * z_local`. Concat fusion là option nếu
+  cần chạy ablation.
+- Train chỉ projection/fusion layers và classifier head; PhoWhisper encoder và
+  EfficientNetB0 local branch đều frozen.
+- Tập trung phân tích Central recall/F1 và lỗi Central -> Northern,
+  Central -> Southern.
+- Không claim hometown, identity, ethnicity hoặc personal background.
 
+**Expected outputs**
 
-### Phrase 10: Speech to Text realtime using PhoPhister
+- `configs/experiments/e7_whisper_cnn_fusion.yaml`.
+- `src/models/whisper_cnn_fusion.py`.
+- `src/training/train_e7_whisper_cnn_fusion.py`.
+- `scripts/train_e7_whisper_cnn_fusion_mps.sh`.
+- `outputs/models/e7_whisper_cnn_fusion.pt`.
+- `outputs/metrics/e7_whisper_cnn_fusion_results.json`.
+- `outputs/metrics/e7_whisper_cnn_fusion_training_log.csv`.
+- `outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv`.
+- `outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv`.
+- `outputs/reports/phase10_whisper_cnn_fusion_report.md`.
+- Updated `outputs/metrics/model_method_comparison.csv` after E7 training.
+
+**Comparison targets**
+
+- MobileNetV3-style / CNN log-Mel baseline.
+- PhoWhisper-base frozen baseline.
+- Frozen `openai/whisper-base` baseline.
+- Vietnamese wav2vec2 frozen-embedding baseline.
+
+**Interpretation criteria**
+
+- If E7 improves Central recall/F1 over frozen PhoWhisper-base, that supports the
+  hypothesis that local CNN features add complementary dialect cues.
+- If E7 does not improve over PhoWhisper, report that the pretrained global
+  representations may already capture the useful signal and that fusion adds
+  latency/complexity.
 
 
 

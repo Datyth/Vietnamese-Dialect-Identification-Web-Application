@@ -4,7 +4,7 @@
   "model_name": "Hybrid frozen PhoWhisper-base encoder + log-Mel CNN fusion",
   "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
   "pretrained": "vinai/PhoWhisper-base",
-  "trainable_setting": "frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head",
+  "trainable_setting": "frozen_whisper_encoder_lightly_finetuned_efficientnetb0_trainable_fusion_head",
   "status": "trained",
   "metadata_path": "data/processed/preprocessed_metadata.csv",
   "label_order": [
@@ -59,7 +59,7 @@
     "duration_sec": 16.0,
     "whisper_input": "PhoWhisper/Whisper input_features",
     "local_input": "standardized log_mel_spectrogram",
-    "local_encoder": "frozen_e2_efficientnetb0_features",
+    "local_encoder": "lightly_finetuned_e2_efficientnetb0_features",
     "n_mels": 64
   },
   "fusion": {
@@ -68,125 +68,131 @@
     "fusion_dim": 512,
     "global_embedding_dim": 512,
     "global_projection": "identity_layernorm",
-    "classifier_hidden_dim": 128,
+    "classifier_hidden_dim": 256,
     "default": "gated"
   },
   "training": {
     "batch_size": 16,
     "max_epochs": 20,
-    "epochs_completed": 20,
+    "epochs_completed": 17,
     "patience": 10,
     "learning_rate": 0.0001,
+    "cnn_learning_rate": 1e-05,
+    "cnn_trainable_layers": 2,
+    "cnn_trainable_child_names": [
+      "5",
+      "6"
+    ],
     "weight_decay": 0.0001,
-    "training_time_minutes": 335.377701728467,
+    "training_time_minutes": 296.2512975534676,
     "training_log_path": "outputs/metrics/e7_whisper_cnn_fusion_training_log.csv"
   },
   "parameter_counts": {
-    "total": 21371843,
-    "trainable": 659203,
+    "total": 21437891,
+    "trainable": 794651,
     "whisper_encoder_total": 20590592,
     "whisper_encoder_trainable": 0,
     "local_encoder_total": 122048,
-    "local_encoder_trainable": 0
+    "local_encoder_trainable": 69400
   },
-  "best_epoch": 11,
-  "best_valid_macro_f1": 0.8192413416443401,
+  "best_epoch": 7,
+  "best_valid_macro_f1": 0.8194010608596095,
   "checkpoint_path": "outputs/models/e7_whisper_cnn_fusion.pt",
-  "model_size_mb": 557.0454158782959,
-  "classifier_checkpoint_size_mb": 2.520829200744629,
+  "model_size_mb": 557.8096008300781,
+  "classifier_checkpoint_size_mb": 3.2850141525268555,
   "encoder_cache_size_mb": 554.0093746185303,
   "cnn_checkpoint_size_mb": 0.5152120590209961,
   "latency_estimate": {
     "sample_count": 5,
-    "mean_milliseconds_per_sample": 141.89953338354826
+    "mean_milliseconds_per_sample": 101.5861252322793
   },
   "central_error_analysis": {
-    "test_central_recall": 0.5893223819301848,
-    "test_central_f1": 0.6809015421115066,
-    "central_to_northern_errors": 82,
-    "central_to_southern_errors": 118
+    "test_central_recall": 0.5913757700205339,
+    "test_central_f1": 0.6848989298454221,
+    "central_to_northern_errors": 85,
+    "central_to_southern_errors": 114
   },
   "metrics": {
     "train": {
-      "loss": 0.25232954875875374,
-      "accuracy": 0.9078156312625251,
-      "macro_f1": 0.9047610311890111,
+      "loss": 0.25141886469009994,
+      "accuracy": 0.906084897066861,
+      "macro_f1": 0.9033960446492187,
       "per_class": {
         "Northern": {
-          "precision": 0.881569387260838,
-          "recall": 0.9816612729234089,
-          "f1": 0.9289268852877377
+          "precision": 0.8759036144578313,
+          "recall": 0.9803128371089536,
+          "f1": 0.9251717994400611
         },
         "Central": {
-          "precision": 0.9309637730690362,
-          "recall": 0.797423887587822,
-          "f1": 0.859035004730369
+          "precision": 0.9220214190093708,
+          "recall": 0.8064988290398126,
+          "f1": 0.8603997501561524
         },
         "Southern": {
-          "precision": 0.9181748661738466,
-          "recall": 0.9346133886870783,
-          "f1": 0.9263212035489263
+          "precision": 0.9263020833333333,
+          "recall": 0.9229372080954852,
+          "f1": 0.9246165843514427
         }
       },
       "per_class_f1": {
-        "Northern": 0.9289268852877377,
-        "Central": 0.859035004730369,
-        "Southern": 0.9263212035489263
+        "Northern": 0.9251717994400611,
+        "Central": 0.8603997501561524,
+        "Southern": 0.9246165843514427
       }
     },
     "valid": {
-      "loss": 0.4724403784517071,
-      "accuracy": 0.8237311385459534,
-      "macro_f1": 0.8192413416443401,
+      "loss": 0.44903036144617,
+      "accuracy": 0.8244170096021948,
+      "macro_f1": 0.8194010608596095,
       "per_class": {
         "Northern": {
-          "precision": 0.8450184501845018,
-          "recall": 0.9423868312757202,
-          "f1": 0.8910505836575876
+          "precision": 0.8363309352517986,
+          "recall": 0.9567901234567902,
+          "f1": 0.8925143953934741
         },
         "Central": {
-          "precision": 0.835509138381201,
-          "recall": 0.6570841889117043,
-          "f1": 0.735632183908046
+          "precision": 0.8217054263565892,
+          "recall": 0.6529774127310062,
+          "f1": 0.7276887871853547
         },
         "Southern": {
-          "precision": 0.7936210131332082,
-          "recall": 0.8721649484536083,
-          "f1": 0.831041257367387
+          "precision": 0.8135922330097087,
+          "recall": 0.8639175257731959,
+          "f1": 0.838
         }
       },
       "per_class_f1": {
-        "Northern": 0.8910505836575876,
-        "Central": 0.735632183908046,
-        "Southern": 0.831041257367387
+        "Northern": 0.8925143953934741,
+        "Central": 0.7276887871853547,
+        "Southern": 0.838
       },
       "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv"
     },
     "test": {
-      "loss": 0.5483061247831019,
-      "accuracy": 0.7935528120713305,
-      "macro_f1": 0.7866425822631591,
+      "loss": 0.5145030184323159,
+      "accuracy": 0.8024691358024691,
+      "macro_f1": 0.7947441694957437,
       "per_class": {
         "Northern": {
-          "precision": 0.826007326007326,
-          "recall": 0.9279835390946503,
-          "f1": 0.874031007751938
+          "precision": 0.8197879858657244,
+          "recall": 0.9547325102880658,
+          "f1": 0.8821292775665399
         },
         "Central": {
-          "precision": 0.8061797752808989,
-          "recall": 0.5893223819301848,
-          "f1": 0.6809015421115066
+          "precision": 0.8135593220338984,
+          "recall": 0.5913757700205339,
+          "f1": 0.6848989298454221
         },
         "Southern": {
-          "precision": 0.7535971223021583,
-          "recall": 0.8639175257731959,
-          "f1": 0.8049951969260326
+          "precision": 0.7769516728624535,
+          "recall": 0.8618556701030928,
+          "f1": 0.8172043010752689
         }
       },
       "per_class_f1": {
-        "Northern": 0.874031007751938,
-        "Central": 0.6809015421115066,
-        "Southern": 0.8049951969260326
+        "Northern": 0.8821292775665399,
+        "Central": 0.6848989298454221,
+        "Southern": 0.8172043010752689
       },
       "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv"
     }
@@ -198,5 +204,5 @@
     "e6_whisper_base",
     "e3_wav2vec2"
   ],
-  "notes": "Frozen PhoWhisper encoder plus frozen trained E2 EfficientNetB0-style log-Mel branch; only projection, fusion, and classification head are trained. No decoder, no ASR transcript, and no personal-background inference."
+  "notes": "Frozen PhoWhisper encoder plus lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch; trainable CNN child modules: 5, 6. Projection, fusion, and classification head are trained. No decoder, no ASR transcript, and no personal-background inference."
 }

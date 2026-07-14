@@ -1,5 +1,332 @@
 # Implementation Report
 
+## Latest Update: Central Class Data Analysis Doc
+
+### Task Summary
+
+Created a detailed Markdown analysis of why the `Central` class is difficult,
+based on the E7 Central analysis notebook, saved E7/E8/E4 metrics, metadata
+signals, audio-quality summaries, acoustic feature overlap, and model behavior.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `docs/central_class_data_analysis.md` | Adds the detailed Central class analysis for reports/docs. |
+| `reports/implementation_report.md` | Records implementation scope and verification. |
+
+### Scope And Decisions
+
+- The doc is written as a standalone analysis artifact, not a notebook export.
+- It includes E7 confusion behavior, E4/E7/E8 comparison, metadata balance,
+  province/speaker diversity, audio-quality signals, acoustic PCA/centroid
+  findings, interpretation, limitations, and recommended next actions.
+- It avoids personal-background inference and frames all conclusions as
+  dataset/model-level evidence.
+- No new code path or dependency was added.
+
+### Commands Run
+
+```bash
+sed -n '809,880p' PLAN.md
+sed -n '1,220p' outputs/reports/e7_central_error_analysis.md
+mkdir -p docs
+wc -l docs/central_class_data_analysis.md
+sed -n '1,240p' docs/central_class_data_analysis.md
+rg -n "Central recall|Nearest-centroid|E8|Final Takeaway|outputs/" docs/central_class_data_analysis.md
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Markdown file | Passed: `docs/central_class_data_analysis.md` created with 435 lines. |
+| Source traceability | Passed: doc lists notebook, report, metrics, confusion matrices, and audio feature CSV sources. |
+| Content coverage | Passed: includes confusion, metadata, audio quality, acoustic overlap, E8 comparison, limitations, and recommendations. |
+
+### Known Limitations
+
+- This is a written analysis over existing artifacts; it does not rerun the
+  notebook or evaluate checkpoints.
+- The acoustic feature section inherits the notebook's `80` samples per class
+  diagnostic scope.
+
+### Reviewer Priorities
+
+1. Review whether the wording is suitable for the final report.
+2. Decide whether to run the optional notebook forward pass before adding
+   per-sample confidence/embedding evidence.
+
+---
+
+## Latest Update: E8 Confusion Matrix Refresh
+
+### Task Summary
+
+Recomputed and visualized the E8 test confusion matrix from the current
+`e8_whisper_cnn_residual_fusion` metrics artifact.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png` | Adds the E8 test confusion matrix figure with counts and row percentages. |
+| `outputs/metrics/e8_whisper_cnn_residual_fusion_confusion_summary.json` | Records metrics recomputed directly from the test confusion matrix CSV. |
+| `reports/implementation_report.md` | Records the refreshed matrix and verification. |
+
+### Scope And Decisions
+
+- Used the existing full-run CSV
+  `outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv`.
+- Did not retrain E8 or re-run model inference.
+- Verified metrics recomputed from the matrix match
+  `outputs/metrics/e8_whisper_cnn_residual_fusion_results.json`.
+
+### Commands Run
+
+```bash
+sed -n '1,20p' outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv
+.venv/bin/python - <<'PY'
+# Read the E8 test confusion matrix CSV, recompute accuracy/F1/per-class
+# metrics, verify them against the E8 results JSON, and save the PNG + summary.
+PY
+ls -lh outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png outputs/metrics/e8_whisper_cnn_residual_fusion_confusion_summary.json
+file outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png outputs/metrics/e8_whisper_cnn_residual_fusion_confusion_summary.json
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Test confusion matrix | Passed: `[[451,19,16],[68,316,103],[14,53,418]]`. |
+| Metrics from matrix | Accuracy `0.8128`, macro F1 `0.8085`, Central recall `0.6489`, Central F1 `0.7223`. |
+| Metrics consistency | Passed: recomputed metrics match the current E8 results JSON. |
+| Figure generation | Passed: PNG written to `outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png`, `1224 x 1007`, 79 KB. |
+| Summary JSON | Passed: written to `outputs/metrics/e8_whisper_cnn_residual_fusion_confusion_summary.json`. |
+
+### Known Limitations
+
+- This refresh uses the saved E8 confusion CSV; it does not independently
+  evaluate the checkpoint again.
+- Matplotlib emitted cache-directory warnings in the sandbox, but the PNG and
+  JSON outputs were created successfully.
+
+### Reviewer Priorities
+
+1. Compare E8 Central errors against E7/E4 before drawing final conclusions.
+2. Use the saved PNG in reports or slides if the current E8 run is accepted as
+   the final run.
+
+---
+
+## Latest Update: Phase 11 E8 Residual-Gated Fusion
+
+### Task Summary
+
+Implemented E8 as a separate Phase 11 residual-gated PhoWhisper + CNN fusion
+experiment. The new default keeps PhoWhisper frozen, lightly fine-tunes the last
+two EfficientNetB0-style local CNN blocks, warm-starts the PhoWhisper baseline
+projector/classifier head, and uses batch size `14` in the MPS runner.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/models/whisper_cnn_fusion.py` | Adds `residual_gated` fusion, learnable beta, feature-wise residual gate diagnostics, and the PhoWhisper linear head option while preserving `concat` and legacy `gated`. |
+| `src/training/train_e8_whisper_cnn_residual_fusion.py` | Adds the Phase 11 E8 trainer, checkpoint/metrics/report writing, gate diagnostics, beta metadata, head warm-start, and separate fusion/head/CNN learning rates. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Extends optimizer parameter grouping so E8 can train fusion, PhoWhisper head, and CNN tail with separate learning rates without changing E7 defaults. |
+| `src/training/train_extended_deep_learning.py` | Includes E8 metrics in the method comparison refresh when the E8 results JSON exists. |
+| `configs/experiments/e8_whisper_cnn_residual_fusion.yaml` | Records the final E8 architecture and hyperparameters. |
+| `scripts/train_e8_whisper_cnn_residual_fusion_mps.sh` | Adds the Apple MPS E8 runner with default `BATCH_SIZE=14`, `DROPOUT=0.0`, residual-gated mode, smoke mode, and ablation flags. |
+| `tests/test_whisper_cnn_fusion.py` | Covers residual output shapes, beta-zero behavior, gate range, gradient routing, E8 checkpoint metadata, head warm-start loading, and legacy mode compatibility. |
+| `PLAN.md`, `README.md` | Documents Phase 11 E8, command usage, output paths, and architecture flow. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- E8 writes new artifacts under `e8_whisper_cnn_residual_fusion*`; E7 artifacts
+  are preserved.
+- The global branch is `MeanPool(PhoWhisper hidden states)` with PhoWhisper
+  frozen and zero trainable encoder parameters.
+- The local branch loads `outputs/models/e2_efficientnetb0_logmel.pt` and
+  fine-tunes child modules `5` and `6` by default with `cnn_learning_rate=1e-5`.
+- Residual fusion is `z = g + beta * sigmoid(W[g;P(l)] + b) * P(l)`, where
+  `P(l)` is `LayerNorm(128) -> Linear(128,512)` with no final ReLU.
+- The classifier head is `Linear(512,256) -> Linear(256,3)` and is warm-started
+  from `outputs/models/phowhisper_pretrained_frozen_encoder.pt` by default.
+- Default full-run command uses `batch_size=14`, `fusion_lr=1e-4`,
+  `head_lr=3e-5`, `cnn_lr=1e-5`, `beta_init=0.1`, `dropout=0.0`, and
+  `best_score_type=hybrid_macro_central`.
+
+### Commands Run
+
+```bash
+bash -n scripts/train_e8_whisper_cnn_residual_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --help
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.venv/bin/python -m src.training.train_e8_whisper_cnn_residual_fusion --device cpu --limit-per-split 1 --max-epochs 1 --batch-size 1 --patience 1 --latency-samples 1 --checkpoint-path /private/tmp/e8_residual_smoke.pt --metrics-path /private/tmp/e8_residual_smoke_results.json --training-log-path /private/tmp/e8_residual_smoke_log.csv --report-path /private/tmp/e8_residual_smoke_report.md --valid-confusion-path /private/tmp/e8_residual_smoke_valid.csv --test-confusion-path /private/tmp/e8_residual_smoke_test.csv --overwrite
+.venv/bin/python -c "import json; p='/private/tmp/e8_residual_smoke_results.json'; d=json.load(open(p)); print(d['experiment_id']); print(d['training']['batch_size']); print(d['fusion']['type'], d['fusion']['beta_init'], round(d['fusion']['beta_learned'], 6)); print(d['fusion']['head_warm_start']['loaded']); print(d['parameter_counts']['whisper_encoder_trainable'], d['parameter_counts']['local_encoder_trainable']); print(d['training']['cnn_trainable_child_names']); print(d['gate_diagnostics']['valid'])"
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e8_whisper_cnn_residual_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Script help | Passed and documents `BATCH_SIZE=14`, `DROPOUT=0.0`, `FUSION_TYPE=residual_gated`, `BETA_INIT=0.1`, and E8 output paths. |
+| Focused fusion tests | Passed: 20 tests. |
+| Full test suite | Passed: 60 tests. |
+| E8 CPU smoke | Passed with temporary outputs under `/private/tmp`; head warm-start loaded, PhoWhisper trainable params `0`, local CNN trainable params `69,400`, CNN children `5`, `6`, beta learned value recorded. |
+| Gate diagnostics | Passed: smoke metrics include overall gate mean and per-label gate means. |
+
+### Known Limitations
+
+- The CPU smoke used only one row per split, so its metric values are not
+  meaningful and produced expected scikit-learn warnings for labels absent from
+  that tiny sample.
+- Full E8 training on Apple MPS was not run inside this turn. Run the script from
+  a normal Terminal so PyTorch can access Metal/MPS.
+- E8 performance metrics remain pending until the full run finishes.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite --smoke`
+   from Terminal.
+2. Run the full E8 experiment:
+   `scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite`.
+3. Compare E8 against E4 and E7 on validation macro F1 plus Central recall/F1.
+
+---
+
+## Latest Update: E7 Central Analysis Notebook
+
+### Task Summary
+
+Created a runnable notebook to analyze why the `Central` class is harder for
+E7 than `Northern` and `Southern`. The notebook includes markdown explanations,
+dataset metadata analysis, audio-quality checks, sampled acoustic features,
+confusion-matrix interpretation, nearest-centroid overlap analysis, and an
+optional heavier E7 forward pass for prediction confidence and embeddings.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `notebooks/e7_central_error_analysis.ipynb` | Adds the Central difficulty analysis notebook. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- The default notebook path is `notebooks/e7_central_error_analysis.ipynb`.
+- Default execution uses existing metadata, current E7 metrics/confusion CSV,
+  and a balanced sample of preprocessed audio features.
+- The E7 checkpoint forward/embedding section is included but disabled by
+  default with `RUN_E7_FORWARD = False` because it is heavier and requires the
+  PhoWhisper cache/checkpoint.
+- No new dependencies were added.
+
+### Commands Run
+
+```bash
+sed -n '753,790p' PLAN.md
+git status --short
+.venv/bin/python - <<'PY'
+# Generate notebooks/e7_central_error_analysis.ipynb.
+PY
+.venv/bin/python - <<'PY'
+# Validate notebook JSON and compile all code cells.
+PY
+.venv/bin/python - <<'PY'
+# Smoke execute all default code cells with MAX_AUDIO_PER_LABEL=2 and temp outputs.
+PY
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Notebook JSON | Passed: nbformat `4.5`, 23 cells. |
+| Code-cell compilation | Passed for all code cells. |
+| Smoke execution | Passed with 2 audio samples per label and outputs redirected to `/private/tmp`. |
+| Optional E7 forward | Present but not executed by default; guarded by `RUN_E7_FORWARD = False`. |
+
+### Known Limitations
+
+- Full notebook execution with `MAX_AUDIO_PER_LABEL=80` was not run in this
+  turn; only a small smoke execution was run.
+- The prediction-confidence and embedding section still needs a deliberate
+  run with `RUN_E7_FORWARD = True` when deeper model-internal analysis is
+  needed.
+
+### Reviewer Priorities
+
+1. Run the notebook normally and inspect the generated figures/report.
+2. If metadata/acoustic evidence is insufficient, enable `RUN_E7_FORWARD=True`
+   to export prediction confidence and embeddings.
+
+---
+
+## Latest Update: E7 Fine-Tuned Confusion Matrix Refresh
+
+### Task Summary
+
+Regenerated the E7 test confusion matrix figure from the current fine-tuned CNN
+E7 metrics artifact.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png` | Refreshes the E7 test confusion matrix visualization for the light CNN fine-tuning run. |
+| `reports/implementation_report.md` | Records the refreshed matrix, metrics, and verification. |
+
+### Scope And Decisions
+
+- Used `outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv`.
+- Confirmed the metrics artifact records `lightly_finetuned_e2_efficientnetb0_features`,
+  `cnn_trainable_layers=2`, and trainable CNN child modules `5`, `6`.
+- Did not retrain or re-evaluate the checkpoint; the figure reflects the current
+  saved E7 metrics CSV.
+
+### Commands Run
+
+```bash
+sed -n '753,780p' PLAN.md
+git status --short
+sed -n '1,14p' outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv
+.venv/bin/python - <<'PY'
+# Confirm current E7 metrics metadata and regenerate
+# outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png.
+PY
+ls -lh outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png
+file outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| E7 training metadata | Passed: `trainable_setting=frozen_whisper_encoder_lightly_finetuned_efficientnetb0_trainable_fusion_head`, CNN children `5`, `6`, local trainable params `69,400`. |
+| Test confusion matrix | Passed: `[[464,16,6],[85,288,114],[17,50,418]]`. |
+| Test metrics from matrix | Accuracy `0.8025`, macro F1 `0.7947`, Central recall `0.5914`, Central F1 `0.6849`. |
+| Figure generation | Passed: PNG written to `outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png`. |
+| File validation | Passed: PNG image data, `1404 x 1170`, 96 KB. |
+
+### Known Limitations
+
+- The figure is regenerated from the current saved CSV, not from a fresh
+  checkpoint evaluation inside this turn.
+
+### Reviewer Priorities
+
+1. Compare this matrix against the previous frozen-CNN E7 matrix when discussing
+   whether light CNN fine-tuning improved Central recall/F1.
+
+---
+
 ## Latest Update: E7 Light CNN Fine-Tuning
 
 ### Task Summary

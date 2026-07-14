@@ -218,8 +218,11 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Local datasets and generated model artifacts
+.DS_Store
+data/**/.DS_Store
 data/raw/
 data/.phase1_tmp/
+data/processed/audio_preprocessed_16s/
 data/**/*.wav
 data/**/*.part
 outputs/models/

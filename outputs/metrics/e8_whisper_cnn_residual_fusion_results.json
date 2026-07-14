@@ -1,0 +1,250 @@
+{
+  "phase": "phase11_whisper_cnn_residual_fusion",
+  "experiment_id": "e8_whisper_cnn_residual_fusion",
+  "model_name": "Residual-gated PhoWhisper-base encoder + log-Mel CNN fusion",
+  "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
+  "pretrained": "vinai/PhoWhisper-base",
+  "trainable_setting": "frozen_whisper_encoder_lightly_finetuned_efficientnetb0_residual_fusion",
+  "status": "trained",
+  "metadata_path": "data/processed/preprocessed_metadata.csv",
+  "label_order": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "device": "mps",
+  "requested_device": "mps",
+  "seed": 42,
+  "model_id": "vinai/PhoWhisper-base",
+  "cache_dir": "outputs/models/hf_cache",
+  "cnn_checkpoint_path": "outputs/models/e2_efficientnetb0_logmel.pt",
+  "cnn_checkpoint_experiment_id": "e2_efficientnetb0",
+  "phowhisper_head_checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
+  "split_counts_full_metadata": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "split_counts_used": {
+    "train": {
+      "Northern": 3708,
+      "Central": 3416,
+      "Southern": 3854
+    },
+    "valid": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    },
+    "test": {
+      "Northern": 486,
+      "Central": 487,
+      "Southern": 485
+    }
+  },
+  "feature": {
+    "sample_rate": 16000,
+    "target_samples": 256000,
+    "duration_sec": 16.0,
+    "whisper_input": "PhoWhisper/Whisper input_features",
+    "global_embedding": "mean_pool_hidden_state",
+    "local_input": "standardized log_mel_spectrogram",
+    "local_encoder": "lightly_finetuned_e2_efficientnetb0_features",
+    "n_mels": 64
+  },
+  "fusion": {
+    "type": "residual_gated",
+    "default": "residual_gated",
+    "local_embedding_dim": 128,
+    "fusion_dim": 512,
+    "global_embedding_dim": 512,
+    "global_projection": "mean_pool_identity",
+    "local_projection": "LayerNorm(128)+Linear(128,512)",
+    "residual_formula": "z = g + beta * sigmoid(W[g;P(l)] + b) * P(l)",
+    "beta_init": 0.1,
+    "beta_learned": 0.09283215552568436,
+    "classifier_head_type": "phowhisper_linear",
+    "classifier_hidden_dim": 256,
+    "head_warm_start": {
+      "loaded": true,
+      "checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
+      "source_model": "WhisperForAudioClassification",
+      "source_training_mode": "frozen_encoder",
+      "source_valid_macro_f1": 0.847441785564984
+    }
+  },
+  "gate_diagnostics": {
+    "train": {
+      "overall_mean": 0.42003624597019695,
+      "mean_by_true_label": {
+        "Northern": 0.40229094600728926,
+        "Central": 0.41978418512980886,
+        "Southern": 0.43733272342311946
+      }
+    },
+    "valid": {
+      "overall_mean": 0.41784434762511236,
+      "mean_by_true_label": {
+        "Northern": 0.40270262478310387,
+        "Central": 0.419200233365476,
+        "Southern": 0.4316558132466582
+      }
+    },
+    "test": {
+      "overall_mean": 0.4189145188926833,
+      "mean_by_true_label": {
+        "Northern": 0.4030451529310564,
+        "Central": 0.4214453704548078,
+        "Southern": 0.4322753159041257
+      }
+    }
+  },
+  "training": {
+    "batch_size": 14,
+    "max_epochs": 20,
+    "epochs_completed": 15,
+    "patience": 10,
+    "best_score_type": "hybrid_macro_central",
+    "fusion_learning_rate": 0.0001,
+    "head_learning_rate": 3e-05,
+    "cnn_learning_rate": 1e-05,
+    "cnn_trainable_layers": 2,
+    "cnn_trainable_child_names": [
+      "5",
+      "6"
+    ],
+    "weight_decay": 0.0001,
+    "training_time_minutes": 258.2304039458337,
+    "training_log_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_training_log.csv"
+  },
+  "parameter_counts": {
+    "total": 21435844,
+    "trainable": 792604,
+    "whisper_encoder_total": 20590592,
+    "whisper_encoder_trainable": 0,
+    "local_encoder_total": 122048,
+    "local_encoder_trainable": 69400
+  },
+  "best_epoch": 5,
+  "best_valid_score": 0.8177392610323486,
+  "best_valid_macro_f1": 0.8395485891622344,
+  "checkpoint_path": "outputs/models/e8_whisper_cnn_residual_fusion.pt",
+  "model_size_mb": 557.802773475647,
+  "classifier_checkpoint_size_mb": 3.278186798095703,
+  "encoder_cache_size_mb": 554.0093746185303,
+  "cnn_checkpoint_size_mb": 0.5152120590209961,
+  "latency_estimate": {
+    "sample_count": 5,
+    "mean_milliseconds_per_sample": 79.631641600281
+  },
+  "central_error_analysis": {
+    "test_central_recall": 0.648870636550308,
+    "test_central_f1": 0.7222857142857143,
+    "central_to_northern_errors": 68,
+    "central_to_southern_errors": 103
+  },
+  "metrics": {
+    "train": {
+      "loss": 0.24560492856017085,
+      "accuracy": 0.9092730916378211,
+      "macro_f1": 0.9068768908678716,
+      "per_class": {
+        "Northern": {
+          "precision": 0.8983304261151258,
+          "recall": 0.9722222222222222,
+          "f1": 0.9338168631006346
+        },
+        "Central": {
+          "precision": 0.9073894804775734,
+          "recall": 0.8231850117096019,
+          "f1": 0.8632386799693016
+        },
+        "Southern": {
+          "precision": 0.9221417485773409,
+          "recall": 0.9250129735339907,
+          "f1": 0.9235751295336787
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.9338168631006346,
+        "Central": 0.8632386799693016,
+        "Southern": 0.9235751295336787
+      }
+    },
+    "valid": {
+      "loss": 0.4241054851315221,
+      "accuracy": 0.8422496570644719,
+      "macro_f1": 0.8395485891622344,
+      "per_class": {
+        "Northern": {
+          "precision": 0.8625235404896422,
+          "recall": 0.9423868312757202,
+          "f1": 0.9006882989183874
+        },
+        "Central": {
+          "precision": 0.8301435406698564,
+          "recall": 0.7125256673511293,
+          "f1": 0.7668508287292818
+        },
+        "Southern": {
+          "precision": 0.831041257367387,
+          "recall": 0.8721649484536083,
+          "f1": 0.8511066398390342
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.9006882989183874,
+        "Central": 0.7668508287292818,
+        "Southern": 0.8511066398390342
+      },
+      "confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
+    },
+    "test": {
+      "loss": 0.4919764342805976,
+      "accuracy": 0.8127572016460906,
+      "macro_f1": 0.8084903929065946,
+      "per_class": {
+        "Northern": {
+          "precision": 0.8461538461538461,
+          "recall": 0.9279835390946503,
+          "f1": 0.8851815505397449
+        },
+        "Central": {
+          "precision": 0.8144329896907216,
+          "recall": 0.648870636550308,
+          "f1": 0.7222857142857143
+        },
+        "Southern": {
+          "precision": 0.7783985102420856,
+          "recall": 0.8618556701030928,
+          "f1": 0.8180039138943248
+        }
+      },
+      "per_class_f1": {
+        "Northern": 0.8851815505397449,
+        "Central": 0.7222857142857143,
+        "Southern": 0.8180039138943248
+      },
+      "confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv"
+    }
+  },
+  "comparison_targets": [
+    "e4_phowhisper",
+    "e7_whisper_cnn_fusion",
+    "e2_efficientnetb0",
+    "e6_whisper_base"
+  ],
+  "notes": "Frozen PhoWhisper encoder plus residual-gated local EfficientNetB0 log-Mel correction. The PhoWhisper projector/classifier head is warm-started from the frozen PhoWhisper baseline checkpoint; no decoder, no ASR transcript, and no personal-background inference."
+}

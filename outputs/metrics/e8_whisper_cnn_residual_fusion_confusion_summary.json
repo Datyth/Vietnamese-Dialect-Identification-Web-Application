@@ -1,0 +1,48 @@
+{
+  "source_confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv",
+  "figure_path": "outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png",
+  "labels": [
+    "Northern",
+    "Central",
+    "Southern"
+  ],
+  "matrix": [
+    [
+      451,
+      19,
+      16
+    ],
+    [
+      68,
+      316,
+      103
+    ],
+    [
+      14,
+      53,
+      418
+    ]
+  ],
+  "accuracy": 0.8127572016460906,
+  "macro_f1": 0.8084903929065946,
+  "per_class": {
+    "Northern": {
+      "precision": 0.8461538461538461,
+      "recall": 0.9279835390946503,
+      "f1": 0.8851815505397449,
+      "support": 486
+    },
+    "Central": {
+      "precision": 0.8144329896907216,
+      "recall": 0.648870636550308,
+      "f1": 0.7222857142857143,
+      "support": 487
+    },
+    "Southern": {
+      "precision": 0.7783985102420856,
+      "recall": 0.8618556701030928,
+      "f1": 0.8180039138943248,
+      "support": 485
+    }
+  }
+}

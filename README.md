@@ -196,11 +196,13 @@ Vietnamese dialect classification. The global branch uses a frozen
 `vinai/PhoWhisper-base` encoder, currently the strongest baseline in this repo,
 and mean-pools encoder hidden states into an utterance-level embedding. The
 local branch converts the same 16 kHz / 16 s waveform into a standardized
-log-Mel spectrogram and passes it through the frozen trained E2
-EfficientNetB0-style features branch to reuse local time-frequency dialect cues.
-PhoWhisper global embeddings stay at 512 dimensions. The frozen EfficientNetB0
-features produce a 128-dimensional local vector, which is projected to 512
-dimensions before gated fusion. The classification head is `512 -> 256 -> 3`.
+log-Mel spectrogram and passes it through the trained E2 EfficientNetB0-style
+features branch to reuse local time-frequency dialect cues. By default, E7
+lightly fine-tunes the last two parameterized EfficientNetB0 feature blocks with
+a smaller CNN learning rate while keeping PhoWhisper frozen. PhoWhisper global
+embeddings stay at 512 dimensions. EfficientNetB0 features produce a
+128-dimensional local vector, which is projected to 512 dimensions before gated
+fusion. The classification head is `512 -> 256 -> 3`.
 
 The default fusion is gated. A concat fusion ablation can be run with:
 
@@ -208,13 +210,19 @@ The default fusion is gated. A concat fusion ablation can be run with:
 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --concat
 ```
 
+The original frozen-CNN ablation can still be run with:
+
+```bash
+CNN_TRAINABLE_LAYERS=0 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite
+```
+
 The E7 report focuses on validation/test macro F1 plus Central recall, Central
 F1, and Central-to-Northern / Central-to-Southern confusion. Interpret E7
 against E1/MobileNetV3-style, the Phase 5 CNN, E3 wav2vec2, E4 PhoWhisper, and
 E6 Whisper-base. If Central recall/F1 improves over frozen PhoWhisper-base, the
-frozen EfficientNetB0-style branch likely contributes complementary dialect
-cues. If it does not, the extra fusion path may add complexity and latency
-without useful gain.
+local EfficientNetB0-style branch likely contributes complementary dialect cues.
+If it does not, the extra fusion path may add complexity and latency without
+useful gain.
 
 E7 predicts only the dataset-defined `Northern`, `Central`, and `Southern`
 labels. It does not infer hometown, identity, ethnicity, or personal background.

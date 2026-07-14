@@ -35,7 +35,7 @@ class LocalSpectrogramEncoder(nn.Module):
 
 
 class WhisperCnnFusionClassifier(nn.Module):
-    """Fuse frozen Whisper encoder states with frozen local CNN features."""
+    """Fuse frozen Whisper encoder states with local CNN features."""
 
     def __init__(
         self,
@@ -60,6 +60,7 @@ class WhisperCnnFusionClassifier(nn.Module):
             )
         self.whisper_encoder = whisper_encoder
         self.freeze_local = freeze_local_encoder
+        self.local_trainable_child_names: set[str] | None = None
         self.fusion_type = fusion_type
         self.local_encoder = local_encoder or LocalSpectrogramEncoder(
             embedding_dim=local_embedding_dim,
@@ -98,15 +99,55 @@ class WhisperCnnFusionClassifier(nn.Module):
             parameter.requires_grad = False
 
     def freeze_local_encoder(self) -> None:
+        self.freeze_local = True
+        self.local_trainable_child_names = None
         self.local_encoder.eval()
         for parameter in self.local_encoder.parameters():
             parameter.requires_grad = False
+
+    def enable_local_encoder_finetuning(self, trainable_layers: int) -> list[str]:
+        if trainable_layers < 0:
+            raise ValueError("trainable_layers must be non-negative.")
+        if trainable_layers == 0:
+            self.freeze_local_encoder()
+            return []
+
+        candidates = [
+            (name, module)
+            for name, module in self.local_encoder.named_children()
+            if any(True for _parameter in module.parameters(recurse=True))
+        ]
+        if not candidates:
+            raise ValueError("local_encoder has no parameterized child modules to fine-tune.")
+        if trainable_layers > len(candidates):
+            raise ValueError(
+                "trainable_layers cannot exceed the number of parameterized "
+                f"local encoder child modules ({len(candidates)})."
+            )
+
+        for parameter in self.local_encoder.parameters():
+            parameter.requires_grad = False
+
+        selected = candidates[-trainable_layers:]
+        selected_names = [name for name, _module in selected]
+        for _name, module in selected:
+            for parameter in module.parameters():
+                parameter.requires_grad = True
+
+        self.freeze_local = False
+        self.local_trainable_child_names = set(selected_names)
+        self.train(self.training)
+        return selected_names
 
     def train(self, mode: bool = True) -> "WhisperCnnFusionClassifier":
         super().train(mode)
         self.whisper_encoder.eval()
         if self.freeze_local:
             self.local_encoder.eval()
+        elif mode and self.local_trainable_child_names is not None:
+            for name, module in self.local_encoder.named_children():
+                if name not in self.local_trainable_child_names:
+                    module.eval()
         return self
 
     def forward(

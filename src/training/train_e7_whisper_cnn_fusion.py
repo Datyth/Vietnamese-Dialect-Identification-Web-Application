@@ -53,6 +53,8 @@ DEFAULT_FUSION_TYPE = "gated"
 DEFAULT_LOCAL_EMBEDDING_DIM = 128
 DEFAULT_FUSION_DIM = 512
 DEFAULT_CLASSIFIER_HIDDEN_DIM = 256
+DEFAULT_CNN_TRAINABLE_LAYERS = 2
+DEFAULT_CNN_LEARNING_RATE = 1e-5
 DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/e2_efficientnetb0_logmel.pt")
 
 
@@ -163,7 +165,7 @@ def load_frozen_whisper_encoder(args: argparse.Namespace, device: Any) -> tuple[
     return feature_extractor, encoder
 
 
-def load_frozen_efficientnet_encoder(args: argparse.Namespace, device: Any) -> tuple[Any, dict[str, Any]]:
+def load_efficientnet_encoder(args: argparse.Namespace, device: Any) -> tuple[Any, dict[str, Any]]:
     torch = require_torch()
     from src.models.efficientnet_classifier import EfficientNetB0Classifier
 
@@ -204,6 +206,28 @@ def load_frozen_efficientnet_encoder(args: argparse.Namespace, device: Any) -> t
     for parameter in encoder.parameters():
         parameter.requires_grad = False
     return encoder, checkpoint
+
+
+def optimizer_parameter_groups(
+    model: Any,
+    learning_rate: float,
+    cnn_learning_rate: float,
+) -> list[dict[str, Any]]:
+    local_parameters = [
+        parameter for parameter in model.local_encoder.parameters() if parameter.requires_grad
+    ]
+    local_parameter_ids = {id(parameter) for parameter in local_parameters}
+    head_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if parameter.requires_grad and id(parameter) not in local_parameter_ids
+    ]
+    groups: list[dict[str, Any]] = []
+    if head_parameters:
+        groups.append({"params": head_parameters, "lr": learning_rate})
+    if local_parameters:
+        groups.append({"params": local_parameters, "lr": cnn_learning_rate})
+    return groups
 
 
 def train_one_epoch(
@@ -316,12 +340,14 @@ def checkpoint_state(
     device: Any,
     parameter_counts: dict[str, int],
 ) -> dict[str, Any]:
+    include_local_encoder = args.cnn_trainable_layers > 0
     trainable_state = {
         key: value.detach().cpu().clone()
         for key, value in model.state_dict().items()
         if not key.startswith("whisper_encoder.")
-        and not key.startswith("local_encoder.")
+        and (include_local_encoder or not key.startswith("local_encoder."))
     }
+    local_trainable_child_names = sorted(model.local_trainable_child_names or [])
     return {
         "model_state_dict": trainable_state,
         "epoch": epoch,
@@ -333,10 +359,13 @@ def checkpoint_state(
         "whisper_encoder_frozen": True,
         "local_encoder": "e2_efficientnetb0_features",
         "local_encoder_checkpoint_path": args.cnn_checkpoint_path.as_posix(),
-        "local_encoder_frozen": True,
+        "local_encoder_frozen": args.cnn_trainable_layers == 0,
+        "local_encoder_trainable_layers": args.cnn_trainable_layers,
+        "local_encoder_trainable_child_names": local_trainable_child_names,
         "fusion_type": args.fusion_type,
         "classifier_hidden_dim": args.classifier_hidden_dim,
         "fusion_dim": args.fusion_dim,
+        "cnn_learning_rate": args.cnn_learning_rate,
         "sample_rate": TARGET_SAMPLE_RATE,
         "target_samples": TARGET_SAMPLES,
         "n_mels": DEFAULT_N_MELS,
@@ -375,13 +404,25 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 def write_report(path: Path, results: dict[str, Any]) -> None:
     metrics = results["metrics"]
     central = results["central_error_analysis"]
+    local_trainable = results["parameter_counts"]["local_encoder_trainable"]
+    if local_trainable:
+        branch_description = (
+            "This experiment combines a frozen PhoWhisper encoder branch with a "
+            "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch. "
+            "Only the selected CNN tail blocks plus the projection, fusion, and "
+            "classification head are trained."
+        )
+    else:
+        branch_description = (
+            "This experiment combines a frozen PhoWhisper encoder branch with a "
+            "frozen trained E2 EfficientNetB0-style log-Mel branch. Only the "
+            "projection, fusion, and classification head are trained."
+        )
     lines = [
         "# Phase 10 PhoWhisper + CNN Fusion Report",
         "",
-        "This experiment combines a frozen PhoWhisper encoder branch with a frozen "
-        "trained E2 EfficientNetB0-style log-Mel branch. Only the projection, fusion, "
-        "and classification head are trained. The decoder is not used, and no ASR "
-        "transcript is generated.",
+        branch_description,
+        "The decoder is not used, and no ASR transcript is generated.",
         "",
         "| Split | Accuracy | Macro F1 | Central Recall | Central F1 | Loss |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -404,6 +445,7 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
             f"Fusion type: `{results['fusion']['type']}`.",
             f"PhoWhisper encoder trainable parameters: {results['parameter_counts']['whisper_encoder_trainable']}.",
             f"EfficientNet local encoder trainable parameters: {results['parameter_counts']['local_encoder_trainable']}.",
+            f"EfficientNet trainable child modules: `{', '.join(results['training']['cnn_trainable_child_names']) or 'none'}`.",
             f"EfficientNet checkpoint: `{results['cnn_checkpoint_path']}`.",
             f"Checkpoint: `{results['checkpoint_path']}`.",
             "",
@@ -561,6 +603,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE)
     parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY)
     parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
+    parser.add_argument(
+        "--cnn-learning-rate",
+        type=float,
+        default=DEFAULT_CNN_LEARNING_RATE,
+        help="Learning rate for trainable EfficientNetB0 local-branch layers.",
+    )
+    parser.add_argument(
+        "--cnn-trainable-layers",
+        type=int,
+        default=DEFAULT_CNN_TRAINABLE_LAYERS,
+        help=(
+            "Number of parameterized local CNN child modules to fine-tune from "
+            "the tail. Use 0 to keep the local branch frozen."
+        ),
+    )
     parser.add_argument("--local-embedding-dim", type=int, default=DEFAULT_LOCAL_EMBEDDING_DIM)
     parser.add_argument("--fusion-dim", type=int, default=DEFAULT_FUSION_DIM)
     parser.add_argument(
@@ -590,6 +647,10 @@ def parse_args() -> argparse.Namespace:
         raise ValueError("--patience must be positive.")
     if args.learning_rate <= 0:
         raise ValueError("--learning-rate must be positive.")
+    if args.cnn_learning_rate <= 0:
+        raise ValueError("--cnn-learning-rate must be positive.")
+    if args.cnn_trainable_layers < 0:
+        raise ValueError("--cnn-trainable-layers cannot be negative.")
     if args.local_embedding_dim <= 0:
         raise ValueError("--local-embedding-dim must be positive.")
     if args.fusion_dim <= 0:
@@ -626,8 +687,8 @@ def main() -> None:
     print(f"Using device: {device}", flush=True)
     print(f"Loading frozen PhoWhisper/Whisper-family encoder: {args.model_id}", flush=True)
     feature_extractor, whisper_encoder = load_frozen_whisper_encoder(args, device)
-    print(f"Loading frozen EfficientNetB0 local branch: {args.cnn_checkpoint_path}", flush=True)
-    local_encoder, cnn_checkpoint = load_frozen_efficientnet_encoder(args, device)
+    print(f"Loading EfficientNetB0 local branch: {args.cnn_checkpoint_path}", flush=True)
+    local_encoder, cnn_checkpoint = load_efficientnet_encoder(args, device)
 
     rows = read_preprocessed_metadata(args.metadata_path)
     rows_by_split = split_rows(rows)
@@ -658,6 +719,9 @@ def main() -> None:
         dropout=args.dropout,
         freeze_local_encoder=True,
     ).to(device)
+    local_trainable_child_names = model.enable_local_encoder_finetuning(
+        args.cnn_trainable_layers
+    )
     parameter_counts = count_parameters(model)
     print(
         "Trainable parameters: "
@@ -668,13 +732,20 @@ def main() -> None:
         f"{parameter_counts['local_encoder_trainable']:,}",
         flush=True,
     )
+    print(
+        "EfficientNet fine-tune child modules: "
+        f"{', '.join(local_trainable_child_names) or 'none'}; "
+        f"cnn_learning_rate={args.cnn_learning_rate:g}",
+        flush=True,
+    )
     criterion = torch.nn.CrossEntropyLoss()
-    trainable_parameters = [
-        parameter for parameter in model.parameters() if parameter.requires_grad
-    ]
+    trainable_parameter_groups = optimizer_parameter_groups(
+        model,
+        learning_rate=args.learning_rate,
+        cnn_learning_rate=args.cnn_learning_rate,
+    )
     optimizer = torch.optim.AdamW(
-        trainable_parameters,
-        lr=args.learning_rate,
+        trainable_parameter_groups,
         weight_decay=args.weight_decay,
     )
 
@@ -765,7 +836,11 @@ def main() -> None:
         "model_name": "Hybrid frozen PhoWhisper-base encoder + log-Mel CNN fusion",
         "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
         "pretrained": args.model_id,
-        "trainable_setting": "frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head",
+        "trainable_setting": (
+            "frozen_whisper_encoder_lightly_finetuned_efficientnetb0_trainable_fusion_head"
+            if args.cnn_trainable_layers > 0
+            else "frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head"
+        ),
         "status": "trained",
         "metadata_path": args.metadata_path.as_posix(),
         "label_order": list(LABELS),
@@ -784,7 +859,11 @@ def main() -> None:
             "duration_sec": TARGET_SAMPLES / TARGET_SAMPLE_RATE,
             "whisper_input": "PhoWhisper/Whisper input_features",
             "local_input": "standardized log_mel_spectrogram",
-            "local_encoder": "frozen_e2_efficientnetb0_features",
+            "local_encoder": (
+                "lightly_finetuned_e2_efficientnetb0_features"
+                if args.cnn_trainable_layers > 0
+                else "frozen_e2_efficientnetb0_features"
+            ),
             "n_mels": DEFAULT_N_MELS,
         },
         "fusion": {
@@ -802,6 +881,9 @@ def main() -> None:
             "epochs_completed": len(training_rows),
             "patience": args.patience,
             "learning_rate": args.learning_rate,
+            "cnn_learning_rate": args.cnn_learning_rate,
+            "cnn_trainable_layers": args.cnn_trainable_layers,
+            "cnn_trainable_child_names": local_trainable_child_names,
             "weight_decay": args.weight_decay,
             "training_time_minutes": training_time_minutes,
             "training_log_path": args.training_log_path.as_posix(),
@@ -841,8 +923,14 @@ def main() -> None:
             "e3_wav2vec2",
         ],
         "notes": (
-            "Frozen PhoWhisper encoder plus frozen trained E2 EfficientNetB0-style "
-            "log-Mel branch; only projection, fusion, and classification head are trained. "
+            "Frozen PhoWhisper encoder plus "
+            + (
+                "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch; "
+                f"trainable CNN child modules: {', '.join(local_trainable_child_names)}. "
+                if args.cnn_trainable_layers > 0
+                else "frozen trained E2 EfficientNetB0-style log-Mel branch; "
+            )
+            + "Projection, fusion, and classification head are trained. "
             "No decoder, no ASR transcript, and no personal-background inference."
         ),
     }

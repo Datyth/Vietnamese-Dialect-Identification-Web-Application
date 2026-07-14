@@ -762,16 +762,18 @@ Fallback:
   parameters, không dùng decoder và không sinh hoặc dùng ASR transcript. Chọn
   PhoWhisper vì E4 hiện là baseline tốt nhất trên tập thực nghiệm hiện tại.
 - Local branch dùng log-Mel spectrogram theo style feature extraction hiện tại
-  và phần `features` của E2 EfficientNetB0-style đã train, freeze toàn bộ
-  parameters để giữ cue cục bộ theo miền thời gian-tần số.
+  và phần `features` của E2 EfficientNetB0-style đã train. Mặc định chỉ
+  fine-tune nhẹ 2 child module có tham số cuối của CNN với learning rate nhỏ
+  để thử cải thiện Central recall/F1 mà vẫn giữ phần lớn local encoder ổn định.
 - Fusion mặc định là gated giữa embedding global và local:
   `z = alpha * z_global + (1 - alpha) * z_local`. Concat fusion là option nếu
   cần chạy ablation.
 - Global PhoWhisper embedding giữ nguyên 512 chiều. Local EfficientNetB0
   features 128 chiều được project lên 512 chiều trước khi gated fusion. Head
   phân loại dùng `512 -> 256 -> 3`.
-- Train chỉ projection/fusion layers và classifier head; PhoWhisper encoder và
-  EfficientNetB0 local branch đều frozen.
+- Train projection/fusion layers, classifier head và tail CNN được chọn;
+  PhoWhisper encoder vẫn frozen. Đặt `CNN_TRAINABLE_LAYERS=0` để chạy lại
+  ablation EfficientNetB0 local branch frozen hoàn toàn.
 - Tập trung phân tích Central recall/F1 và lỗi Central -> Northern,
   Central -> Southern.
 - Không claim hometown, identity, ethnicity hoặc personal background.

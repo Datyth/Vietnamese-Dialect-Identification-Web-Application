@@ -1,7 +1,7 @@
 experiment_name: e7_whisper_cnn_fusion
 phase: phase10_whisper_cnn_fusion
 mode: full
-model_name: hybrid_frozen_phowhisper_base_frozen_efficientnetb0
+model_name: hybrid_frozen_phowhisper_base_lightly_finetuned_efficientnetb0
 pretrained_encoder: vinai/PhoWhisper-base
 sample_rate: 16000
 duration_sec: 16
@@ -20,13 +20,17 @@ local_branch:
   input: standardized_log_mel_spectrogram
   cnn: e2_efficientnetb0
   checkpoint: outputs/models/e2_efficientnetb0_logmel.pt
-  frozen: true
+  frozen: false
+  fine_tune_trainable_layers: 2
+  learning_rate: 1e-5
 fusion:
   default: gated
   optional: concat
-training_mode: frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head
-batch_size: 4
+training_mode: frozen_whisper_encoder_lightly_finetuned_efficientnetb0_trainable_fusion_head
+batch_size: 16
 learning_rate: 1e-4
+cnn_learning_rate: 1e-5
+cnn_trainable_layers: 2
 weight_decay: 1e-4
 dropout: 0.0
 local_embedding_dim: 128

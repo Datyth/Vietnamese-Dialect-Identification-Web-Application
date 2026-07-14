@@ -7,8 +7,8 @@ usage() {
 Usage: scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite [--smoke] [--concat] [--allow-download]
 
 Train Phase 10 E7 outside the Codex sandbox with Apple MPS:
-  E7: frozen PhoWhisper-base encoder + frozen trained E2 EfficientNetB0 branch
-      + trainable projection/fusion/classification head.
+  E7: frozen PhoWhisper-base encoder + lightly fine-tuned trained E2
+      EfficientNetB0 branch + trainable projection/fusion/classification head.
 
 Run from a normal Terminal window so PyTorch can see the Apple Metal device.
 
@@ -23,10 +23,12 @@ Environment overrides:
   PYTHON_BIN       default: .venv/bin/python
   DEVICE           default: mps
   SEED             default: 42
-  BATCH_SIZE       default: 4
+  BATCH_SIZE       default: 16
   E7_MAX_EPOCHS    default: 20
   PATIENCE         default: 10
   E7_LR            default: 1e-4
+  CNN_LR           default: 1e-5
+  CNN_TRAINABLE_LAYERS default: 2
   WEIGHT_DECAY     default: 1e-4
   DROPOUT          default: 0.0
   LOCAL_EMBED_DIM  default: 128
@@ -92,11 +94,13 @@ BATCH_SIZE="${BATCH_SIZE:-16}"
 E7_MAX_EPOCHS="${E7_MAX_EPOCHS:-20}"
 PATIENCE="${PATIENCE:-10}"
 E7_LR="${E7_LR:-1e-4}"
+CNN_LR="${CNN_LR:-1e-5}"
+CNN_TRAINABLE_LAYERS="${CNN_TRAINABLE_LAYERS:-2}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
-DROPOUT="${DROPOUT:-0.25}"
+DROPOUT="${DROPOUT:-0.0}"
 LOCAL_EMBED_DIM="${LOCAL_EMBED_DIM:-128}"
 FUSION_DIM="${FUSION_DIM:-512}"
-CLASSIFIER_HIDDEN_DIM="${CLASSIFIER_HIDDEN_DIM:-128}"
+CLASSIFIER_HIDDEN_DIM="${CLASSIFIER_HIDDEN_DIM:-256}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
 MODEL_ID="${MODEL_ID:-vinai/PhoWhisper-base}"
 CACHE_DIR="${CACHE_DIR:-outputs/models/hf_cache}"
@@ -167,6 +171,8 @@ echo "  batch_size=${BATCH_SIZE}"
 echo "  e7_max_epochs=${E7_MAX_EPOCHS}"
 echo "  patience=${PATIENCE}"
 echo "  learning_rate=${E7_LR}"
+echo "  cnn_learning_rate=${CNN_LR}"
+echo "  cnn_trainable_layers=${CNN_TRAINABLE_LAYERS}"
 echo "  weight_decay=${WEIGHT_DECAY}"
 echo "  dropout=${DROPOUT}"
 echo "  local_embed_dim=${LOCAL_EMBED_DIM}"
@@ -224,6 +230,8 @@ E7_CMD=(
   --model-id "${MODEL_ID}"
   --cache-dir "${CACHE_DIR}"
   --learning-rate "${E7_LR}"
+  --cnn-learning-rate "${CNN_LR}"
+  --cnn-trainable-layers "${CNN_TRAINABLE_LAYERS}"
   --weight-decay "${WEIGHT_DECAY}"
   --dropout "${DROPOUT}"
   --local-embedding-dim "${LOCAL_EMBED_DIM}"
@@ -241,7 +249,7 @@ if [[ "${ALLOW_DOWNLOAD}" == "1" ]]; then
   E7_CMD+=(--allow-download)
 fi
 echo
-echo "==> E7: frozen PhoWhisper-base + frozen E2 EfficientNetB0 fusion head"
+echo "==> E7: frozen PhoWhisper-base + lightly fine-tuned E2 EfficientNetB0 fusion head"
 "${E7_CMD[@]}"
 
 echo

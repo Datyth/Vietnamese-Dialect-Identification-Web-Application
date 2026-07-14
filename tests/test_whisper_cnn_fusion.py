@@ -12,10 +12,13 @@ from src.models.whisper_cnn_fusion import (
     infer_whisper_hidden_size,
 )
 from src.training.train_e7_whisper_cnn_fusion import (
+    DEFAULT_CNN_LEARNING_RATE,
+    DEFAULT_CNN_TRAINABLE_LAYERS,
     DEFAULT_FUSION_TYPE,
     DEFAULT_MODEL_ID,
     central_error_analysis,
     checkpoint_state,
+    optimizer_parameter_groups,
 )
 from src.training.train_extended_deep_learning import (
     append_phase10_comparison_row,
@@ -108,6 +111,33 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
                 fusion_type="gated",
             )
 
+    def test_local_encoder_can_finetune_last_parameterized_blocks(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+        )
+
+        selected = model.enable_local_encoder_finetuning(trainable_layers=1)
+        counts = count_parameters(model)
+
+        self.assertEqual(selected, ["2"])
+        self.assertFalse(model.freeze_local)
+        self.assertEqual(model.local_trainable_child_names, {"2"})
+        self.assertTrue(all(not parameter.requires_grad for parameter in model.local_encoder[0].parameters()))
+        self.assertTrue(all(parameter.requires_grad for parameter in model.local_encoder[2].parameters()))
+        self.assertGreater(counts["local_encoder_trainable"], 0)
+
 
 class WhisperCnnFusionTrainingTests(unittest.TestCase):
     def test_phase10_default_encoder_is_phowhisper(self):
@@ -115,6 +145,10 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
 
     def test_phase10_default_fusion_is_gated(self):
         self.assertEqual(DEFAULT_FUSION_TYPE, "gated")
+
+    def test_phase10_defaults_lightly_finetune_cnn_tail(self):
+        self.assertEqual(DEFAULT_CNN_TRAINABLE_LAYERS, 2)
+        self.assertEqual(DEFAULT_CNN_LEARNING_RATE, 1e-5)
 
     def test_central_error_analysis_counts_targeted_confusions(self):
         matrix = np.asarray(
@@ -159,6 +193,8 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
             fusion_type="concat",
             fusion_dim=16,
             classifier_hidden_dim=256,
+            cnn_trainable_layers=0,
+            cnn_learning_rate=1e-5,
             seed=42,
         )
 
@@ -177,6 +213,73 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         self.assertFalse(any(key.startswith("local_encoder.") for key in saved_keys))
         self.assertEqual(state["local_encoder"], "e2_efficientnetb0_features")
         self.assertTrue(state["local_encoder_frozen"])
+        self.assertEqual(state["local_encoder_trainable_layers"], 0)
+
+    def test_checkpoint_state_includes_finetuned_local_encoder(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+        )
+        selected = model.enable_local_encoder_finetuning(trainable_layers=1)
+        args = SimpleNamespace(
+            model_id=DEFAULT_MODEL_ID,
+            cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
+            fusion_type="gated",
+            fusion_dim=16,
+            classifier_hidden_dim=256,
+            cnn_trainable_layers=1,
+            cnn_learning_rate=1e-5,
+            seed=42,
+        )
+
+        state = checkpoint_state(
+            model,
+            epoch=1,
+            valid_metrics={"macro_f1": 0.5},
+            args=args,
+            device=torch.device("cpu"),
+            parameter_counts=count_parameters(model),
+        )
+
+        saved_keys = state["model_state_dict"]
+        self.assertTrue(any(key.startswith("local_encoder.") for key in saved_keys))
+        self.assertFalse(any(key.startswith("whisper_encoder.") for key in saved_keys))
+        self.assertFalse(state["local_encoder_frozen"])
+        self.assertEqual(state["local_encoder_trainable_layers"], 1)
+        self.assertEqual(state["local_encoder_trainable_child_names"], selected)
+
+    def test_optimizer_uses_smaller_lr_for_trainable_cnn_layers(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+        )
+        model.enable_local_encoder_finetuning(trainable_layers=1)
+
+        groups = optimizer_parameter_groups(
+            model,
+            learning_rate=1e-4,
+            cnn_learning_rate=1e-5,
+        )
+
+        self.assertEqual([group["lr"] for group in groups], [1e-4, 1e-5])
 
     def test_phase10_comparison_row_is_collected_from_metrics_json(self):
         payload = {

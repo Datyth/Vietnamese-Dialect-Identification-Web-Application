@@ -1,5 +1,74 @@
 # Implementation Report
 
+## Latest Update: E7 Light CNN Fine-Tuning
+
+### Task Summary
+
+Changed E7 so the PhoWhisper branch remains frozen, but the EfficientNetB0
+local branch can be lightly fine-tuned instead of always being fully frozen.
+The default runner now fine-tunes the last two parameterized CNN feature blocks
+with a smaller CNN learning rate.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/models/whisper_cnn_fusion.py` | Adds controlled local-CNN fine-tuning for the last parameterized child modules while keeping frozen modules in eval mode. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Adds `--cnn-trainable-layers`, `--cnn-learning-rate`, separate optimizer param groups, checkpoint metadata, and local encoder checkpoint saving when fine-tuned. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Runs light CNN fine-tuning by default with `CNN_TRAINABLE_LAYERS=2`, `CNN_LR=1e-5`, and `DROPOUT=0.0`. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Records the light fine-tuning setup. |
+| `PLAN.md`, `README.md` | Documents the updated E7 local-branch training mode and frozen-CNN ablation command. |
+| `tests/test_whisper_cnn_fusion.py` | Covers local CNN layer selection, checkpoint state, optimizer learning rates, and defaults. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- PhoWhisper remains fully frozen.
+- The default local branch setting is `cnn_trainable_layers=2`, meaning the last
+  two parameterized top-level EfficientNetB0 feature modules are trainable.
+- CNN trainable parameters use `cnn_learning_rate=1e-5`, while fusion/head
+  parameters keep `learning_rate=1e-4`.
+- `CNN_TRAINABLE_LAYERS=0` preserves the previous frozen-CNN ablation path.
+- No full E7 retraining was run in this implementation step.
+
+### Commands Run
+
+```bash
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+scripts/train_e7_whisper_cnn_fusion_mps.sh --help
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.venv/bin/python - <<'PY'
+# Instantiate the repo EfficientNetB0 local branch and confirm the selected
+# fine-tuned child modules plus trainable parameter counts.
+PY
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Script help | Passed and documents `CNN_LR=1e-5`, `CNN_TRAINABLE_LAYERS=2`, `DROPOUT=0.0`, and `CLASSIFIER_HIDDEN_DIM=256`. |
+| Focused E7 tests | Passed: 13 tests. |
+| Full tests | Passed: 53 tests. |
+| EfficientNet tail check | Passed: `CNN_TRAINABLE_LAYERS=2` selects child modules `5` and `6`, adding `69,400` local CNN trainable parameters. |
+
+### Known Limitations
+
+- Metrics and confusion matrices are not updated yet; run the E7 script to train
+  the fine-tuned CNN variant and compare Central recall/F1.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Run full `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite` and compare
+   Central recall/F1 against the frozen-CNN E7 artifact.
+
+---
+
 ## Latest Update: E7 Confusion Matrix Figure
 
 ### Task Summary

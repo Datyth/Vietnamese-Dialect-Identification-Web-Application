@@ -25,12 +25,13 @@ Environment overrides:
   SEED             default: 42
   BATCH_SIZE       default: 4
   E7_MAX_EPOCHS    default: 20
-  PATIENCE         default: 5
+  PATIENCE         default: 10
   E7_LR            default: 1e-4
   WEIGHT_DECAY     default: 1e-4
   DROPOUT          default: 0.0
   LOCAL_EMBED_DIM  default: 128
-  FUSION_DIM       default: 256
+  FUSION_DIM       default: 512
+  CLASSIFIER_HIDDEN_DIM default: 256
   FUSION_TYPE      default: gated
   LATENCY_SAMPLES  default: 5
   SMOKE_LIMIT_PER_SPLIT default: 6
@@ -87,14 +88,15 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
 DEVICE="${DEVICE:-mps}"
 SEED="${SEED:-42}"
-BATCH_SIZE="${BATCH_SIZE:-4}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 E7_MAX_EPOCHS="${E7_MAX_EPOCHS:-20}"
-PATIENCE="${PATIENCE:-5}"
+PATIENCE="${PATIENCE:-10}"
 E7_LR="${E7_LR:-1e-4}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
-DROPOUT="${DROPOUT:-0.0}"
+DROPOUT="${DROPOUT:-0.25}"
 LOCAL_EMBED_DIM="${LOCAL_EMBED_DIM:-128}"
-FUSION_DIM="${FUSION_DIM:-256}"
+FUSION_DIM="${FUSION_DIM:-512}"
+CLASSIFIER_HIDDEN_DIM="${CLASSIFIER_HIDDEN_DIM:-128}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
 MODEL_ID="${MODEL_ID:-vinai/PhoWhisper-base}"
 CACHE_DIR="${CACHE_DIR:-outputs/models/hf_cache}"
@@ -118,7 +120,6 @@ if [[ ! -f "${CNN_CHECKPOINT}" ]]; then
   echo "Run E2 first, then rerun E7." >&2
   exit 1
 fi
-
 if [[ "${SMOKE}" == "1" ]]; then
   E7_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
 fi
@@ -170,6 +171,7 @@ echo "  weight_decay=${WEIGHT_DECAY}"
 echo "  dropout=${DROPOUT}"
 echo "  local_embed_dim=${LOCAL_EMBED_DIM}"
 echo "  fusion_dim=${FUSION_DIM}"
+echo "  classifier_hidden_dim=${CLASSIFIER_HIDDEN_DIM}"
 echo "  fusion_type=${FUSION_TYPE}"
 echo "  model_id=${MODEL_ID}"
 echo "  cache_dir=${CACHE_DIR}"
@@ -226,6 +228,7 @@ E7_CMD=(
   --dropout "${DROPOUT}"
   --local-embedding-dim "${LOCAL_EMBED_DIM}"
   --fusion-dim "${FUSION_DIM}"
+  --classifier-hidden-dim "${CLASSIFIER_HIDDEN_DIM}"
   --cnn-checkpoint-path "${CNN_CHECKPOINT}"
   --fusion-type "${FUSION_TYPE}"
   --latency-samples "${LATENCY_SAMPLES}"
@@ -237,7 +240,6 @@ fi
 if [[ "${ALLOW_DOWNLOAD}" == "1" ]]; then
   E7_CMD+=(--allow-download)
 fi
-
 echo
 echo "==> E7: frozen PhoWhisper-base + frozen E2 EfficientNetB0 fusion head"
 "${E7_CMD[@]}"

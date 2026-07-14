@@ -198,6 +198,9 @@ and mean-pools encoder hidden states into an utterance-level embedding. The
 local branch converts the same 16 kHz / 16 s waveform into a standardized
 log-Mel spectrogram and passes it through the frozen trained E2
 EfficientNetB0-style features branch to reuse local time-frequency dialect cues.
+PhoWhisper global embeddings stay at 512 dimensions. The frozen EfficientNetB0
+features produce a 128-dimensional local vector, which is projected to 512
+dimensions before gated fusion. The classification head is `512 -> 256 -> 3`.
 
 The default fusion is gated. A concat fusion ablation can be run with:
 

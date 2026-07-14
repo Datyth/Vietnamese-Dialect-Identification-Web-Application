@@ -41,7 +41,7 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
             whisper_hidden_size=infer_whisper_hidden_size(encoder),
             num_classes=3,
             local_embedding_dim=16,
-            fusion_dim=16,
+            fusion_dim=32,
             fusion_type="concat",
         )
 
@@ -65,6 +65,7 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
             whisper_encoder=encoder,
             whisper_hidden_size=32,
             num_classes=3,
+            fusion_dim=32,
         )
 
         dropout_modules = [
@@ -80,7 +81,8 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
             whisper_hidden_size=24,
             num_classes=3,
             local_embedding_dim=12,
-            fusion_dim=12,
+            fusion_dim=24,
+            classifier_hidden_dim=10,
             fusion_type="gated",
         )
 
@@ -90,6 +92,21 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
         )
 
         self.assertEqual(tuple(logits.shape), (2, 3))
+        self.assertEqual(tuple(model.classifier[1].weight.shape), (10, 24))
+        self.assertEqual(tuple(model.classifier[4].weight.shape), (3, 10))
+
+    def test_fusion_dim_must_match_global_embedding_dim(self):
+        encoder = FakeWhisperEncoder(hidden_size=24)
+
+        with self.assertRaisesRegex(ValueError, "fusion_dim must match"):
+            WhisperCnnFusionClassifier(
+                whisper_encoder=encoder,
+                whisper_hidden_size=24,
+                num_classes=3,
+                local_embedding_dim=12,
+                fusion_dim=32,
+                fusion_type="gated",
+            )
 
 
 class WhisperCnnFusionTrainingTests(unittest.TestCase):
@@ -134,12 +151,14 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
             num_classes=3,
             local_encoder=local_encoder,
             local_embedding_dim=4,
-            fusion_dim=8,
+            fusion_dim=16,
         )
         args = SimpleNamespace(
             model_id=DEFAULT_MODEL_ID,
             cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
             fusion_type="concat",
+            fusion_dim=16,
+            classifier_hidden_dim=256,
             seed=42,
         )
 

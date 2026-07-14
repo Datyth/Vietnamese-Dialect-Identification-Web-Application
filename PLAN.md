@@ -767,6 +767,9 @@ Fallback:
 - Fusion mặc định là gated giữa embedding global và local:
   `z = alpha * z_global + (1 - alpha) * z_local`. Concat fusion là option nếu
   cần chạy ablation.
+- Global PhoWhisper embedding giữ nguyên 512 chiều. Local EfficientNetB0
+  features 128 chiều được project lên 512 chiều trước khi gated fusion. Head
+  phân loại dùng `512 -> 256 -> 3`.
 - Train chỉ projection/fusion layers và classifier head; PhoWhisper encoder và
   EfficientNetB0 local branch đều frozen.
 - Tập trung phân tích Central recall/F1 và lỗi Central -> Northern,

@@ -51,7 +51,8 @@ DEFAULT_WEIGHT_DECAY = 1e-4
 DEFAULT_DROPOUT = 0.0
 DEFAULT_FUSION_TYPE = "gated"
 DEFAULT_LOCAL_EMBEDDING_DIM = 128
-DEFAULT_FUSION_DIM = 256
+DEFAULT_FUSION_DIM = 512
+DEFAULT_CLASSIFIER_HIDDEN_DIM = 256
 DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/e2_efficientnetb0_logmel.pt")
 
 
@@ -334,6 +335,8 @@ def checkpoint_state(
         "local_encoder_checkpoint_path": args.cnn_checkpoint_path.as_posix(),
         "local_encoder_frozen": True,
         "fusion_type": args.fusion_type,
+        "classifier_hidden_dim": args.classifier_hidden_dim,
+        "fusion_dim": args.fusion_dim,
         "sample_rate": TARGET_SAMPLE_RATE,
         "target_samples": TARGET_SAMPLES,
         "n_mels": DEFAULT_N_MELS,
@@ -561,6 +564,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-embedding-dim", type=int, default=DEFAULT_LOCAL_EMBEDDING_DIM)
     parser.add_argument("--fusion-dim", type=int, default=DEFAULT_FUSION_DIM)
     parser.add_argument(
+        "--classifier-hidden-dim",
+        type=int,
+        default=DEFAULT_CLASSIFIER_HIDDEN_DIM,
+    )
+    parser.add_argument(
         "--fusion-type",
         choices=("concat", "gated"),
         default=DEFAULT_FUSION_TYPE,
@@ -586,6 +594,8 @@ def parse_args() -> argparse.Namespace:
         raise ValueError("--local-embedding-dim must be positive.")
     if args.fusion_dim <= 0:
         raise ValueError("--fusion-dim must be positive.")
+    if args.classifier_hidden_dim <= 0:
+        raise ValueError("--classifier-hidden-dim must be positive.")
     if args.limit_per_split is not None and args.limit_per_split <= 0:
         raise ValueError("--limit-per-split must be positive.")
     if args.latency_samples < 0:
@@ -643,6 +653,7 @@ def main() -> None:
         local_encoder=local_encoder,
         local_embedding_dim=args.local_embedding_dim,
         fusion_dim=args.fusion_dim,
+        classifier_hidden_dim=args.classifier_hidden_dim,
         fusion_type=args.fusion_type,
         dropout=args.dropout,
         freeze_local_encoder=True,
@@ -657,10 +668,10 @@ def main() -> None:
         f"{parameter_counts['local_encoder_trainable']:,}",
         flush=True,
     )
+    criterion = torch.nn.CrossEntropyLoss()
     trainable_parameters = [
         parameter for parameter in model.parameters() if parameter.requires_grad
     ]
-    criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(
         trainable_parameters,
         lr=args.learning_rate,
@@ -728,6 +739,7 @@ def main() -> None:
         raise RuntimeError("Training finished without a best checkpoint.")
     model.load_state_dict(best_state["model_state_dict"], strict=False)
     model.to(device)
+    training_time_minutes = (time.perf_counter() - started_training) / 60.0
 
     final_metrics: dict[str, Any] = {}
     final_matrices: dict[str, np.ndarray] = {}
@@ -745,7 +757,6 @@ def main() -> None:
     write_confusion_matrix(args.test_confusion_path, final_matrices["test"])
     write_training_log(args.training_log_path, training_rows)
     latency = estimate_latency(model, loaders["test"], device, args.latency_samples)
-    training_time_minutes = (time.perf_counter() - started_training) / 60.0
     central = central_error_analysis(final_matrices["test"], final_metrics["test"])
 
     results = {
@@ -780,6 +791,9 @@ def main() -> None:
             "type": args.fusion_type,
             "local_embedding_dim": args.local_embedding_dim,
             "fusion_dim": args.fusion_dim,
+            "global_embedding_dim": infer_whisper_hidden_size(whisper_encoder),
+            "global_projection": "identity_layernorm",
+            "classifier_hidden_dim": args.classifier_hidden_dim,
             "default": DEFAULT_FUSION_TYPE,
         },
         "training": {

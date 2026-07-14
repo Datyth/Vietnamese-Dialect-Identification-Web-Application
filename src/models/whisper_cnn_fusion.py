@@ -45,6 +45,7 @@ class WhisperCnnFusionClassifier(nn.Module):
         local_encoder: nn.Module | None = None,
         local_embedding_dim: int = 256,
         fusion_dim: int = 256,
+        classifier_hidden_dim: int = 256,
         fusion_type: str = "concat",
         dropout: float = 0.0,
         freeze_local_encoder: bool = True,
@@ -52,6 +53,11 @@ class WhisperCnnFusionClassifier(nn.Module):
         super().__init__()
         if fusion_type not in {"concat", "gated"}:
             raise ValueError("fusion_type must be one of: concat, gated.")
+        if fusion_dim != whisper_hidden_size:
+            raise ValueError(
+                "fusion_dim must match whisper_hidden_size because the global "
+                "PhoWhisper branch is not projected."
+            )
         self.whisper_encoder = whisper_encoder
         self.freeze_local = freeze_local_encoder
         self.fusion_type = fusion_type
@@ -59,12 +65,7 @@ class WhisperCnnFusionClassifier(nn.Module):
             embedding_dim=local_embedding_dim,
             dropout=dropout,
         )
-        self.global_projection = nn.Sequential(
-            nn.LayerNorm(whisper_hidden_size),
-            nn.Linear(whisper_hidden_size, fusion_dim),
-            nn.ReLU(inplace=True),
-            dropout_layer(dropout),
-        )
+        self.global_norm = nn.LayerNorm(whisper_hidden_size)
         self.local_projection = nn.Sequential(
             nn.LayerNorm(local_embedding_dim),
             nn.Linear(local_embedding_dim, fusion_dim),
@@ -82,8 +83,10 @@ class WhisperCnnFusionClassifier(nn.Module):
             classifier_input_dim = fusion_dim * 2
         self.classifier = nn.Sequential(
             nn.LayerNorm(classifier_input_dim),
+            nn.Linear(classifier_input_dim, classifier_hidden_dim),
+            nn.ReLU(inplace=True),
             dropout_layer(dropout),
-            nn.Linear(classifier_input_dim, num_classes),
+            nn.Linear(classifier_hidden_dim, num_classes),
         )
         self.freeze_whisper_encoder()
         if self.freeze_local:
@@ -124,7 +127,7 @@ class WhisperCnnFusionClassifier(nn.Module):
             local_embedding = self.local_encoder(logmel)
         if local_embedding.ndim > 2:
             local_embedding = torch.flatten(local_embedding, start_dim=1)
-        projected_global = self.global_projection(global_embedding)
+        projected_global = self.global_norm(global_embedding)
         projected_local = self.local_projection(local_embedding)
 
         if self.fusion_type == "gated":

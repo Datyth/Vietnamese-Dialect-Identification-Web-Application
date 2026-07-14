@@ -63,127 +63,130 @@
     "n_mels": 64
   },
   "fusion": {
-    "type": "concat",
+    "type": "gated",
     "local_embedding_dim": 128,
-    "fusion_dim": 256,
-    "default": "concat"
+    "fusion_dim": 512,
+    "global_embedding_dim": 512,
+    "global_projection": "identity_layernorm",
+    "classifier_hidden_dim": 128,
+    "default": "gated"
   },
   "training": {
-    "batch_size": 4,
+    "batch_size": 16,
     "max_epochs": 20,
-    "epochs_completed": 10,
-    "patience": 5,
+    "epochs_completed": 20,
+    "patience": 10,
     "learning_rate": 0.0001,
     "weight_decay": 0.0001,
-    "training_time_minutes": 200.37678499374985,
+    "training_time_minutes": 335.377701728467,
     "training_log_path": "outputs/metrics/e7_whisper_cnn_fusion_training_log.csv"
   },
   "parameter_counts": {
-    "total": 20880835,
-    "trainable": 168195,
+    "total": 21371843,
+    "trainable": 659203,
     "whisper_encoder_total": 20590592,
     "whisper_encoder_trainable": 0,
     "local_encoder_total": 122048,
     "local_encoder_trainable": 0
   },
-  "best_epoch": 5,
-  "best_valid_macro_f1": 0.8072311326428364,
+  "best_epoch": 11,
+  "best_valid_macro_f1": 0.8192413416443401,
   "checkpoint_path": "outputs/models/e7_whisper_cnn_fusion.pt",
-  "model_size_mb": 555.1718597412109,
-  "classifier_checkpoint_size_mb": 0.647273063659668,
+  "model_size_mb": 557.0454158782959,
+  "classifier_checkpoint_size_mb": 2.520829200744629,
   "encoder_cache_size_mb": 554.0093746185303,
   "cnn_checkpoint_size_mb": 0.5152120590209961,
   "latency_estimate": {
     "sample_count": 5,
-    "mean_milliseconds_per_sample": 114.7907916107215
+    "mean_milliseconds_per_sample": 141.89953338354826
   },
   "central_error_analysis": {
-    "test_central_recall": 0.5811088295687885,
-    "test_central_f1": 0.6658823529411765,
-    "central_to_northern_errors": 85,
-    "central_to_southern_errors": 119
+    "test_central_recall": 0.5893223819301848,
+    "test_central_f1": 0.6809015421115066,
+    "central_to_northern_errors": 82,
+    "central_to_southern_errors": 118
   },
   "metrics": {
     "train": {
-      "loss": 0.292525846515537,
-      "accuracy": 0.8990708690107487,
-      "macro_f1": 0.8960395465263579,
+      "loss": 0.25232954875875374,
+      "accuracy": 0.9078156312625251,
+      "macro_f1": 0.9047610311890111,
       "per_class": {
         "Northern": {
-          "precision": 0.8696278511404562,
-          "recall": 0.97680690399137,
-          "f1": 0.9201066937634955
+          "precision": 0.881569387260838,
+          "recall": 0.9816612729234089,
+          "f1": 0.9289268852877377
         },
         "Central": {
-          "precision": 0.9097618248909762,
-          "recall": 0.7939110070257611,
-          "f1": 0.8478974519305925
+          "precision": 0.9309637730690362,
+          "recall": 0.797423887587822,
+          "f1": 0.859035004730369
         },
         "Southern": {
-          "precision": 0.9227557411273486,
-          "recall": 0.9174883238194084,
-          "f1": 0.9201144938849857
+          "precision": 0.9181748661738466,
+          "recall": 0.9346133886870783,
+          "f1": 0.9263212035489263
         }
       },
       "per_class_f1": {
-        "Northern": 0.9201066937634955,
-        "Central": 0.8478974519305925,
-        "Southern": 0.9201144938849857
+        "Northern": 0.9289268852877377,
+        "Central": 0.859035004730369,
+        "Southern": 0.9263212035489263
       }
     },
     "valid": {
-      "loss": 0.48578004260254903,
-      "accuracy": 0.8120713305898491,
-      "macro_f1": 0.8072311326428364,
+      "loss": 0.4724403784517071,
+      "accuracy": 0.8237311385459534,
+      "macro_f1": 0.8192413416443401,
       "per_class": {
         "Northern": {
-          "precision": 0.8287795992714025,
-          "recall": 0.9362139917695473,
-          "f1": 0.8792270531400966
+          "precision": 0.8450184501845018,
+          "recall": 0.9423868312757202,
+          "f1": 0.8910505836575876
         },
         "Central": {
-          "precision": 0.8067010309278351,
-          "recall": 0.6427104722792608,
-          "f1": 0.7154285714285714
+          "precision": 0.835509138381201,
+          "recall": 0.6570841889117043,
+          "f1": 0.735632183908046
         },
         "Southern": {
-          "precision": 0.7984644913627639,
-          "recall": 0.8577319587628865,
-          "f1": 0.827037773359841
+          "precision": 0.7936210131332082,
+          "recall": 0.8721649484536083,
+          "f1": 0.831041257367387
         }
       },
       "per_class_f1": {
-        "Northern": 0.8792270531400966,
-        "Central": 0.7154285714285714,
-        "Southern": 0.827037773359841
+        "Northern": 0.8910505836575876,
+        "Central": 0.735632183908046,
+        "Southern": 0.831041257367387
       },
       "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv"
     },
     "test": {
-      "loss": 0.5290910464689769,
-      "accuracy": 0.7873799725651578,
-      "macro_f1": 0.7801840361292584,
+      "loss": 0.5483061247831019,
+      "accuracy": 0.7935528120713305,
+      "macro_f1": 0.7866425822631591,
       "per_class": {
         "Northern": {
-          "precision": 0.8211678832116789,
-          "recall": 0.9259259259259259,
-          "f1": 0.8704061895551257
+          "precision": 0.826007326007326,
+          "recall": 0.9279835390946503,
+          "f1": 0.874031007751938
         },
         "Central": {
-          "precision": 0.7796143250688705,
-          "recall": 0.5811088295687885,
-          "f1": 0.6658823529411765
+          "precision": 0.8061797752808989,
+          "recall": 0.5893223819301848,
+          "f1": 0.6809015421115066
         },
         "Southern": {
-          "precision": 0.7586837294332724,
-          "recall": 0.8556701030927835,
-          "f1": 0.8042635658914729
+          "precision": 0.7535971223021583,
+          "recall": 0.8639175257731959,
+          "f1": 0.8049951969260326
         }
       },
       "per_class_f1": {
-        "Northern": 0.8704061895551257,
-        "Central": 0.6658823529411765,
-        "Southern": 0.8042635658914729
+        "Northern": 0.874031007751938,
+        "Central": 0.6809015421115066,
+        "Southern": 0.8049951969260326
       },
       "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv"
     }

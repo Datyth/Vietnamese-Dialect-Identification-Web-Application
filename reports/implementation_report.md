@@ -1,5 +1,184 @@
 # Implementation Report
 
+## Latest Update: E7 Confusion Matrix Figure
+
+### Task Summary
+
+Generated a test confusion matrix figure for the current E7 Whisper-CNN fusion
+metrics artifact.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png` | Adds the E7 test confusion matrix visualization with counts and row percentages. |
+| `reports/implementation_report.md` | Records the figure generation and verification. |
+
+### Scope And Decisions
+
+- Used the existing `outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv`.
+- Did not retrain or re-evaluate E7.
+- Kept the figure naming aligned with existing E1-E6 confusion matrix artifacts.
+
+### Commands Run
+
+```bash
+sed -n '1,12p' outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv
+.venv/bin/python - <<'PY'
+# Read the E7 test confusion matrix CSV and save
+# outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png.
+PY
+ls -lh outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png
+file outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| CSV read | Passed: labels `Northern`, `Central`, `Southern`; matrix `[[451,16,19],[82,287,118],[13,53,419]]`. |
+| Figure generation | Passed: PNG written to `outputs/figures/e7_whisper_cnn_fusion_confusion_matrix.png`. |
+| File validation | Passed: PNG image data, `1350 x 1134`, 96 KB. |
+
+### Known Limitations
+
+- The figure reflects the existing saved E7 test CSV. If that CSV came from an
+  older or interrupted run, regenerate E7 metrics before using the plot as final
+  experiment evidence.
+
+### Reviewer Priorities
+
+1. Confirm the CSV corresponds to the intended final E7 checkpoint before
+   including the figure in the final report.
+
+---
+
+## Latest Update: Reverted E7 Eval-Only Path
+
+### Task Summary
+
+Reverted the E7 `--eval-only` checkpoint-reporting path and restored the trainer
+to its previous train-then-evaluate flow. The 512-dimensional gated-head
+architecture remains unchanged.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Removes eval-only checkpoint loading and restores inline post-training evaluation/report writing. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Removes `--eval-only` CLI handling. |
+| `README.md` | Removes the interrupted-training eval-only command. |
+| `reports/implementation_report.md` | Records the revert and verification. |
+
+### Scope And Decisions
+
+- No architecture changes were reverted.
+- E7 still saves the best checkpoint during training, but there is no resume or
+  eval-only mode.
+
+### Commands Run
+
+```bash
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+rg -n -- "eval-only|eval_only|load_best_checkpoint|validate_checkpoint_contract" src/training/train_e7_whisper_cnn_fusion.py scripts/train_e7_whisper_cnn_fusion_mps.sh README.md reports/implementation_report.md
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Eval-only scan | Passed: no eval-only symbols remain. |
+| Focused E7 tests | Passed: 9 tests. |
+| Full tests | Passed: 49 tests. |
+
+### Known Limitations
+
+- Interrupted E7 training still cannot be resumed or evaluated via a dedicated
+  eval-only command.
+
+### Reviewer Priorities
+
+1. Re-run E7 from the beginning when final metrics are needed.
+
+---
+
+## Latest Update: Phase 10 E7 512-Dim Gated Head
+
+### Task Summary
+
+Updated E7 so the PhoWhisper global branch keeps its native 512-dimensional
+embedding, the frozen EfficientNetB0 local feature is projected from 128 to 512,
+gated fusion operates at 512 dimensions, and the classifier head is
+`512 -> 256 -> 3`.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `src/models/whisper_cnn_fusion.py` | Removes the global linear projection, adds a hidden classifier layer, and validates `fusion_dim` against the global embedding size. |
+| `src/training/train_e7_whisper_cnn_fusion.py` | Sets `fusion_dim=512`, adds `classifier_hidden_dim=256`, records the new fusion/head metadata. |
+| `scripts/train_e7_whisper_cnn_fusion_mps.sh` | Sets `FUSION_DIM=512` and adds `CLASSIFIER_HIDDEN_DIM`. |
+| `configs/experiments/e7_whisper_cnn_fusion.yaml` | Records global/local/fusion/head dimensions. |
+| `PLAN.md`, `README.md` | Documents the updated E7 data flow and dimensions. |
+| `tests/test_whisper_cnn_fusion.py` | Covers the new dim contract and hidden classifier layer. |
+| `reports/implementation_report.md` | Records implementation and verification. |
+
+### Scope And Decisions
+
+- PhoWhisper and EfficientNetB0 branches remain frozen.
+- Global PhoWhisper embedding is normalized but not linearly projected.
+- Local EfficientNet features are projected from 128 to 512 so both branches can
+  be gated at the same dimensionality.
+- No new dependencies were added.
+
+### Commands Run
+
+```bash
+git status --short
+sed -n '740,810p' PLAN.md
+sed -n '1,190p' src/models/whisper_cnn_fusion.py
+sed -n '40,90p' src/training/train_e7_whisper_cnn_fusion.py
+git diff -- scripts/train_e7_whisper_cnn_fusion_mps.sh
+sed -n '1,260p' scripts/train_e7_whisper_cnn_fusion_mps.sh
+sed -n '1,220p' tests/test_whisper_cnn_fusion.py
+bash -n scripts/train_e7_whisper_cnn_fusion_mps.sh
+.venv/bin/python -m compileall -q src tests
+scripts/train_e7_whisper_cnn_fusion_mps.sh --help
+.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
+.venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+.venv/bin/python -m src.training.train_e7_whisper_cnn_fusion --device cpu --limit-per-split 3 --max-epochs 1 --batch-size 1 --patience 1 --latency-samples 1 --checkpoint-path /private/tmp/e7_512_head_smoke.pt --metrics-path /private/tmp/e7_512_head_smoke_results.json --training-log-path /private/tmp/e7_512_head_smoke_log.csv --report-path /private/tmp/e7_512_head_smoke_report.md --valid-confusion-path /private/tmp/e7_512_head_smoke_valid.csv --test-confusion-path /private/tmp/e7_512_head_smoke_test.csv --overwrite
+.venv/bin/python -c "import json; data=json.load(open('/private/tmp/e7_512_head_smoke_results.json')); print(data['fusion']); print(data['parameter_counts']['trainable'])"
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Shell syntax | Passed for `scripts/train_e7_whisper_cnn_fusion_mps.sh`. |
+| Python compilation | Passed for `src` and `tests`. |
+| Script help | Passed and documents `FUSION_DIM=512` plus `CLASSIFIER_HIDDEN_DIM=256`. |
+| Focused E7 tests | Passed: 9 tests. |
+| Full tests | Passed: 49 tests. |
+| E7 CPU smoke | Passed with temp outputs under `/private/tmp`; trainable params `725,251`, fusion metadata records global `512`, local raw `128`, fusion `512`, classifier hidden `256`. |
+
+### Known Limitations
+
+- Full E7 retraining was not run during this change.
+- Existing E7 metrics are stale until regenerated with the new 512-dimensional
+  gated head.
+
+### Reviewer Priorities
+
+1. Run `scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke`.
+2. Run full E7 and compare against E4 PhoWhisper and the prior E7 concat run.
+
+---
+
 ## Latest Update: Phase 10 E7 Gated Mode And Bash Hyperparameters
 
 ### Task Summary

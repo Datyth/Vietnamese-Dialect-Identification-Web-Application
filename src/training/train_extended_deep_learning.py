@@ -43,6 +43,10 @@ SPLITS = ("train", "valid", "test")
 PHASE = "phase9_extended_deep_learning_experiments"
 PHASE10 = "phase10_whisper_cnn_fusion"
 PHASE10_METRIC_PATH = Path("outputs/metrics/e7_whisper_cnn_fusion_results.json")
+PHASE11 = "phase11_whisper_cnn_residual_fusion"
+PHASE11_METRIC_PATH = Path(
+    "outputs/metrics/e8_whisper_cnn_residual_fusion_results.json"
+)
 DEFAULT_SEED = 42
 DEFAULT_SMOKE_LIMIT_PER_SPLIT = 9
 DEFAULT_SMOKE_EPOCHS = 1
@@ -1724,6 +1728,7 @@ def collect_method_comparison_rows() -> list[dict[str, Any]]:
     for spec in EXPERIMENTS.values():
         append_phase9_comparison_row(rows, spec)
     append_phase10_comparison_row(rows, PHASE10_METRIC_PATH)
+    append_phase10_comparison_row(rows, PHASE11_METRIC_PATH)
     return rows
 
 

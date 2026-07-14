@@ -1,0 +1,61 @@
+experiment_name: e8_whisper_cnn_residual_fusion
+phase: phase11_whisper_cnn_residual_fusion
+mode: full
+model_name: residual_gated_phowhisper_base_lightly_finetuned_efficientnetb0
+pretrained_encoder: vinai/PhoWhisper-base
+sample_rate: 16000
+duration_sec: 16
+num_classes: 3
+label_order:
+  - Northern
+  - Central
+  - Southern
+global_branch:
+  encoder: vinai/PhoWhisper-base
+  frozen: true
+  use_decoder: false
+  use_asr_transcripts: false
+  pooling: mean_hidden_state
+local_branch:
+  input: standardized_log_mel_spectrogram
+  cnn: e2_efficientnetb0
+  checkpoint: outputs/models/e2_efficientnetb0_logmel.pt
+  frozen: false
+  fine_tune_trainable_layers: 2
+  learning_rate: 1e-5
+fusion:
+  default: residual_gated
+  optional:
+    - gated
+    - concat
+  formula: z = g + beta * sigmoid(W[g;P(l)] + b) * P(l)
+  beta_init: 0.1
+  local_projection: LayerNorm(128)+Linear(128,512)
+classifier:
+  type: phowhisper_linear
+  warm_start_checkpoint: outputs/models/phowhisper_pretrained_frozen_encoder.pt
+  projector: Linear(512,256)
+  classifier: Linear(256,3)
+training_mode: frozen_whisper_encoder_lightly_finetuned_efficientnetb0_residual_fusion
+batch_size: 14
+fusion_learning_rate: 1e-4
+head_learning_rate: 3e-5
+cnn_learning_rate: 1e-5
+cnn_trainable_layers: 2
+weight_decay: 1e-4
+dropout: 0.0
+local_embedding_dim: 128
+global_embedding_dim: 512
+fusion_dim: 512
+classifier_hidden_dim: 256
+max_epochs: 20
+early_stopping_patience: 10
+metric_for_best_model: hybrid_macro_central
+primary_analysis:
+  - central_recall
+  - central_f1
+  - central_to_northern_errors
+  - central_to_southern_errors
+  - residual_gate_mean
+  - beta_learned
+notes: predicts only the three dataset-defined regional dialect labels; no hometown, identity, ethnicity, or personal-background inference

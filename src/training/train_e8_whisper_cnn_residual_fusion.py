@@ -1,10 +1,9 @@
-"""Train Phase 10 hybrid PhoWhisper + CNN fusion experiment."""
+"""Train Phase 11 residual-gated PhoWhisper + CNN fusion experiment."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import json
 import random
 import time
 from pathlib import Path
@@ -12,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from src.features.logmel import DEFAULT_N_MELS, log_mel_spectrogram
+from src.features.logmel import DEFAULT_N_MELS
 from src.models.whisper_cnn_fusion import (
     WhisperCnnFusionClassifier,
     count_parameters,
@@ -23,6 +22,19 @@ from src.training.train_cnn import (
     require_sklearn_metrics,
     resolve_device,
     set_seed,
+)
+from src.training.train_e7_whisper_cnn_fusion import (
+    build_loader,
+    central_error_analysis,
+    combined_model_size_mb,
+    ensure_outputs_absent,
+    estimate_latency,
+    load_efficientnet_encoder,
+    load_frozen_whisper_encoder,
+    optimizer_parameter_groups,
+    require_torch,
+    train_one_epoch,
+    write_json,
 )
 from src.training.train_extended_deep_learning import (
     LABELS,
@@ -36,250 +48,79 @@ from src.training.train_extended_deep_learning import (
     split_rows,
     write_method_comparison_from_available,
 )
-from src.utils.audio import TARGET_SAMPLE_RATE, TARGET_SAMPLES, load_audio
+from src.utils.audio import TARGET_SAMPLE_RATE, TARGET_SAMPLES
 
 
-PHASE = "phase10_whisper_cnn_fusion"
-EXPERIMENT_ID = "e7_whisper_cnn_fusion"
+PHASE = "phase11_whisper_cnn_residual_fusion"
+EXPERIMENT_ID = "e8_whisper_cnn_residual_fusion"
 DEFAULT_MODEL_ID = "vinai/PhoWhisper-base"
 DEFAULT_SEED = 42
-DEFAULT_BATCH_SIZE = 4
+DEFAULT_BATCH_SIZE = 14
 DEFAULT_MAX_EPOCHS = 20
-DEFAULT_PATIENCE = 5
-DEFAULT_LEARNING_RATE = 1e-4
+DEFAULT_PATIENCE = 10
+DEFAULT_FUSION_LEARNING_RATE = 1e-4
+DEFAULT_HEAD_LEARNING_RATE = 3e-5
+DEFAULT_CNN_LEARNING_RATE = 1e-5
 DEFAULT_WEIGHT_DECAY = 1e-4
 DEFAULT_DROPOUT = 0.0
-DEFAULT_FUSION_TYPE = "gated"
+DEFAULT_FUSION_TYPE = "residual_gated"
 DEFAULT_LOCAL_EMBEDDING_DIM = 128
 DEFAULT_FUSION_DIM = 512
 DEFAULT_CLASSIFIER_HIDDEN_DIM = 256
 DEFAULT_CNN_TRAINABLE_LAYERS = 2
-DEFAULT_CNN_LEARNING_RATE = 1e-5
+DEFAULT_BETA_INIT = 0.1
+DEFAULT_BEST_SCORE_TYPE = "hybrid_macro_central"
 DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/e2_efficientnetb0_logmel.pt")
+DEFAULT_PHOWHISPER_HEAD_CHECKPOINT_PATH = Path(
+    "outputs/models/phowhisper_pretrained_frozen_encoder.pt"
+)
 
 
-class WhisperCnnRowsDataset:
-    """Build Whisper input features and log-Mel features from one waveform."""
-
-    def __init__(self, rows: list[dict[str, str]], feature_extractor: Any) -> None:
-        self.rows = rows
-        self.feature_extractor = feature_extractor
-
-    def __len__(self) -> int:
-        return len(self.rows)
-
-    def __getitem__(self, index: int) -> dict[str, Any]:
-        torch = require_torch()
-        row = self.rows[index]
-        waveform = load_preprocessed_waveform(row)
-        encoded = self.feature_extractor(
-            waveform,
-            sampling_rate=TARGET_SAMPLE_RATE,
-            return_tensors="np",
-        )
-        whisper_features = np.asarray(encoded["input_features"][0], dtype=np.float32)
-        logmel = log_mel_spectrogram(waveform, sample_rate=TARGET_SAMPLE_RATE)
-        label = LABEL_TO_INDEX[row["label"]]
-        return {
-            "whisper_input_features": torch.from_numpy(whisper_features),
-            "logmel": torch.from_numpy(logmel[None, :, :]),
-            "label": torch.tensor(label, dtype=torch.long),
-        }
-
-
-def require_torch() -> Any:
-    try:
-        import torch
-    except ImportError as exc:
-        raise RuntimeError(
-            "PyTorch is required for Phase 10 fusion training. "
-            "Install dependencies with: uv pip install --python .venv/bin/python "
-            "-r requirements.txt"
-        ) from exc
-    return torch
-
-
-def require_transformers() -> tuple[Any, Any]:
-    try:
-        from transformers import AutoFeatureExtractor, WhisperForAudioClassification
-    except ImportError as exc:
-        raise RuntimeError(
-            "transformers is required for Phase 10 fusion training. "
-            "Install dependencies with: uv pip install --python .venv/bin/python "
-            "-r requirements.txt"
-        ) from exc
-    return AutoFeatureExtractor, WhisperForAudioClassification
-
-
-def load_preprocessed_waveform(row: dict[str, str]) -> np.ndarray:
-    path = Path(row["preprocessed_audio_path"])
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Preprocessed audio for {row['sample_id']} not found: {path}"
-        )
-    waveform, sample_rate = load_audio(path)
-    if sample_rate != TARGET_SAMPLE_RATE:
-        raise ValueError(f"Wrong sample rate for {path}: {sample_rate}")
-    if waveform.shape != (TARGET_SAMPLES,):
-        raise ValueError(f"Wrong waveform shape for {path}: {waveform.shape}")
-    return waveform.astype(np.float32, copy=False)
-
-
-def build_loader(
-    rows: list[dict[str, str]],
-    feature_extractor: Any,
-    batch_size: int,
-    shuffle: bool,
-    seed: int,
-) -> Any:
+def load_phowhisper_head_weights(model: Any, checkpoint_path: Path, device: Any) -> dict[str, Any]:
     torch = require_torch()
-    dataset = WhisperCnnRowsDataset(rows, feature_extractor)
-    generator = torch.Generator()
-    generator.manual_seed(seed)
-    return torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        generator=generator if shuffle else None,
-    )
+    if model.classifier_head_type != "phowhisper_linear":
+        return {"loaded": False, "reason": "classifier head is not phowhisper_linear"}
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"PhoWhisper head checkpoint not found: {checkpoint_path}")
 
-
-def load_frozen_whisper_encoder(args: argparse.Namespace, device: Any) -> tuple[Any, Any]:
-    AutoFeatureExtractor, WhisperForAudioClassification = require_transformers()
-    local_files_only = not args.allow_download
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        args.model_id,
-        cache_dir=args.cache_dir,
-        local_files_only=local_files_only,
-    )
-    whisper_model = WhisperForAudioClassification.from_pretrained(
-        args.model_id,
-        cache_dir=args.cache_dir,
-        local_files_only=local_files_only,
-    )
-    encoder = whisper_model.encoder
-    encoder.to(device)
-    encoder.eval()
-    for parameter in encoder.parameters():
-        parameter.requires_grad = False
-    return feature_extractor, encoder
-
-
-def load_efficientnet_encoder(args: argparse.Namespace, device: Any) -> tuple[Any, dict[str, Any]]:
-    torch = require_torch()
-    from src.models.efficientnet_classifier import EfficientNetB0Classifier
-
-    path = args.cnn_checkpoint_path
-    if not path.exists():
-        raise FileNotFoundError(
-            f"EfficientNetB0 checkpoint not found: {path}. Run E2 first with "
-            "scripts/train_e3_e5_mps.sh or src.training.train_e2_efficientnet."
-        )
-    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     if not isinstance(checkpoint, dict) or "model_state_dict" not in checkpoint:
         raise ValueError(
-            f"Unsupported EfficientNet checkpoint format in {path}; expected model_state_dict."
+            f"Unsupported PhoWhisper checkpoint format in {checkpoint_path}; expected model_state_dict."
+        )
+    labels = tuple(checkpoint.get("label_order", ()))
+    if labels != tuple(LABELS):
+        raise ValueError(
+            "PhoWhisper checkpoint label order mismatch: "
+            f"checkpoint={labels}, code={tuple(LABELS)}"
         )
 
-    labels = tuple(checkpoint.get("label_order", ()))
-    contracts = {
-        "experiment_id": (checkpoint.get("experiment_id"), "e2_efficientnetb0"),
-        "feature": (checkpoint.get("feature"), "log_mel_spectrogram"),
-        "sample_rate": (checkpoint.get("sample_rate"), TARGET_SAMPLE_RATE),
-        "target_samples": (checkpoint.get("target_samples"), TARGET_SAMPLES),
-        "n_mels": (checkpoint.get("n_mels"), DEFAULT_N_MELS),
-        "label_order": (labels, tuple(LABELS)),
+    state = checkpoint["model_state_dict"]
+    required_shapes = {
+        "projector.weight": tuple(model.projector.weight.shape),
+        "projector.bias": tuple(model.projector.bias.shape),
+        "classifier.weight": tuple(model.classifier.weight.shape),
+        "classifier.bias": tuple(model.classifier.bias.shape),
     }
     mismatches = {
-        name: {"checkpoint": actual, "code": expected}
-        for name, (actual, expected) in contracts.items()
-        if actual != expected
+        key: {"checkpoint": tuple(state[key].shape), "model": shape}
+        for key, shape in required_shapes.items()
+        if key not in state or tuple(state[key].shape) != shape
     }
     if mismatches:
-        raise ValueError(f"EfficientNet checkpoint/training contract mismatch: {mismatches}")
+        raise ValueError(f"PhoWhisper head checkpoint shape mismatch: {mismatches}")
 
-    model = EfficientNetB0Classifier(num_classes=len(LABELS))
-    model.load_state_dict(checkpoint["model_state_dict"], strict=True)
-    encoder = model.features
-    encoder.to(device)
-    encoder.eval()
-    for parameter in encoder.parameters():
-        parameter.requires_grad = False
-    return encoder, checkpoint
-
-
-def optimizer_parameter_groups(
-    model: Any,
-    learning_rate: float,
-    cnn_learning_rate: float,
-    head_learning_rate: float | None = None,
-) -> list[dict[str, Any]]:
-    local_parameters = [
-        parameter for parameter in model.local_encoder.parameters() if parameter.requires_grad
-    ]
-    local_parameter_ids = {id(parameter) for parameter in local_parameters}
-    head_parameters: list[Any] = []
-    if head_learning_rate is not None:
-        projector = getattr(model, "projector", None)
-        if projector is not None:
-            head_parameters.extend(
-                parameter for parameter in projector.parameters() if parameter.requires_grad
-            )
-        classifier = getattr(model, "classifier", None)
-        if classifier is not None:
-            head_parameters.extend(
-                parameter for parameter in classifier.parameters() if parameter.requires_grad
-            )
-    head_parameter_ids = {id(parameter) for parameter in head_parameters}
-    main_parameters = [
-        parameter
-        for parameter in model.parameters()
-        if parameter.requires_grad
-        and id(parameter) not in local_parameter_ids
-        and id(parameter) not in head_parameter_ids
-    ]
-    if head_learning_rate is None:
-        main_parameters.extend(head_parameters)
-        head_parameters = []
-    groups: list[dict[str, Any]] = []
-    if main_parameters:
-        groups.append({"params": main_parameters, "lr": learning_rate})
-    if head_parameters:
-        groups.append({"params": head_parameters, "lr": head_learning_rate})
-    if local_parameters:
-        groups.append({"params": local_parameters, "lr": cnn_learning_rate})
-    return groups
-
-
-def train_one_epoch(
-    model: Any,
-    loader: Any,
-    optimizer: Any,
-    criterion: Any,
-    device: Any,
-) -> dict[str, float]:
-    torch = require_torch()
-    model.train()
-    total_loss = 0.0
-    total_correct = 0
-    total_count = 0
-    for batch in loader:
-        whisper_features = batch["whisper_input_features"].to(device)
-        logmel = batch["logmel"].to(device)
-        labels = batch["label"].to(device)
-        optimizer.zero_grad(set_to_none=True)
-        logits = model(whisper_features, logmel)
-        loss = criterion(logits, labels)
-        loss.backward()
-        optimizer.step()
-
-        batch_size = int(labels.shape[0])
-        total_loss += float(loss.detach().cpu()) * batch_size
-        total_correct += int((torch.argmax(logits, dim=1) == labels).sum().cpu())
-        total_count += batch_size
+    with torch.no_grad():
+        model.projector.weight.copy_(state["projector.weight"])
+        model.projector.bias.copy_(state["projector.bias"])
+        model.classifier.weight.copy_(state["classifier.weight"])
+        model.classifier.bias.copy_(state["classifier.bias"])
     return {
-        "loss": total_loss / max(total_count, 1),
-        "accuracy": total_correct / max(total_count, 1),
+        "loaded": True,
+        "checkpoint_path": checkpoint_path.as_posix(),
+        "source_model": checkpoint.get("model"),
+        "source_training_mode": checkpoint.get("training_mode"),
+        "source_valid_macro_f1": checkpoint.get("valid_metrics", {}).get("macro_f1"),
     }
 
 
@@ -288,7 +129,7 @@ def evaluate_model(
     loader: Any,
     criterion: Any,
     device: Any,
-) -> tuple[dict[str, Any], np.ndarray, list[int], list[int]]:
+) -> tuple[dict[str, Any], np.ndarray, list[int], list[int], dict[str, Any] | None]:
     torch = require_torch()
     accuracy_score, classification_report, confusion_matrix, f1_score = (
         require_sklearn_metrics()
@@ -298,14 +139,32 @@ def evaluate_model(
     total_count = 0
     true_labels: list[int] = []
     predictions: list[int] = []
+    gate_sum = 0.0
+    gate_count = 0
+    gate_sum_by_label = {index: 0.0 for index in range(len(LABELS))}
+    gate_count_by_label = {index: 0 for index in range(len(LABELS))}
+
     with torch.no_grad():
         for batch in loader:
             whisper_features = batch["whisper_input_features"].to(device)
             logmel = batch["logmel"].to(device)
             labels = batch["label"].to(device)
-            logits = model(whisper_features, logmel)
+            logits, diagnostics = model.forward_with_diagnostics(whisper_features, logmel)
             loss = criterion(logits, labels)
             predicted = torch.argmax(logits, dim=1)
+
+            residual_gate = diagnostics.get("residual_gate")
+            if residual_gate is not None:
+                gate_sum += float(residual_gate.detach().sum().cpu())
+                gate_count += int(residual_gate.numel())
+                for label_index in range(len(LABELS)):
+                    label_mask = labels == label_index
+                    if bool(label_mask.any().detach().cpu()):
+                        class_gate = residual_gate[label_mask]
+                        gate_sum_by_label[label_index] += float(
+                            class_gate.detach().sum().cpu()
+                        )
+                        gate_count_by_label[label_index] += int(class_gate.numel())
 
             batch_size = int(labels.shape[0])
             total_loss += float(loss.detach().cpu()) * batch_size
@@ -323,6 +182,19 @@ def evaluate_model(
         zero_division=0,
     )
     matrix = confusion_matrix(true_labels, predictions, labels=label_indexes)
+    gate_diagnostics = None
+    if gate_count > 0:
+        gate_diagnostics = {
+            "overall_mean": gate_sum / gate_count,
+            "mean_by_true_label": {
+                LABELS[index]: (
+                    gate_sum_by_label[index] / gate_count_by_label[index]
+                    if gate_count_by_label[index]
+                    else None
+                )
+                for index in range(len(LABELS))
+            },
+        }
     return (
         {
             "loss": total_loss / max(total_count, 1),
@@ -350,16 +222,31 @@ def evaluate_model(
         matrix,
         true_labels,
         predictions,
+        gate_diagnostics,
     )
+
+
+def best_score(valid_metrics: dict[str, Any], score_type: str) -> float:
+    if score_type == "macro_f1":
+        return float(valid_metrics["macro_f1"])
+    if score_type == "hybrid_macro_central":
+        return float(
+            0.7 * valid_metrics["macro_f1"]
+            + 0.3 * valid_metrics["per_class"]["Central"]["f1"]
+        )
+    raise ValueError(f"Unsupported best score type: {score_type}")
 
 
 def checkpoint_state(
     model: Any,
     epoch: int,
     valid_metrics: dict[str, Any],
+    valid_gate_diagnostics: dict[str, Any] | None,
     args: argparse.Namespace,
     device: Any,
     parameter_counts: dict[str, int],
+    head_warm_start: dict[str, Any],
+    score: float,
 ) -> dict[str, Any]:
     include_local_encoder = args.cnn_trainable_layers > 0
     trainable_state = {
@@ -369,10 +256,13 @@ def checkpoint_state(
         and (include_local_encoder or not key.startswith("local_encoder."))
     }
     local_trainable_child_names = sorted(model.local_trainable_child_names or [])
+    beta_value = float(model.beta.detach().cpu()) if model.beta is not None else None
     return {
         "model_state_dict": trainable_state,
         "epoch": epoch,
         "valid_metrics": valid_metrics,
+        "valid_best_score": score,
+        "valid_gate_diagnostics": valid_gate_diagnostics,
         "label_order": LABELS,
         "experiment_id": EXPERIMENT_ID,
         "model": "WhisperCnnFusionClassifier",
@@ -384,8 +274,15 @@ def checkpoint_state(
         "local_encoder_trainable_layers": args.cnn_trainable_layers,
         "local_encoder_trainable_child_names": local_trainable_child_names,
         "fusion_type": args.fusion_type,
-        "classifier_hidden_dim": args.classifier_hidden_dim,
         "fusion_dim": args.fusion_dim,
+        "local_embedding_dim": args.local_embedding_dim,
+        "classifier_head_type": model.classifier_head_type,
+        "classifier_hidden_dim": args.classifier_hidden_dim,
+        "beta_init": args.beta_init,
+        "beta_learned": beta_value,
+        "head_warm_start": head_warm_start,
+        "fusion_learning_rate": args.learning_rate,
+        "head_learning_rate": args.head_learning_rate,
         "cnn_learning_rate": args.cnn_learning_rate,
         "sample_rate": TARGET_SAMPLE_RATE,
         "target_samples": TARGET_SAMPLES,
@@ -406,6 +303,8 @@ def write_training_log(path: Path, rows: list[dict[str, Any]]) -> None:
         "valid_macro_f1",
         "valid_central_recall",
         "valid_central_f1",
+        "valid_best_score",
+        "valid_gate_mean",
         "epoch_seconds",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -415,35 +314,21 @@ def write_training_log(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as output_file:
-        json.dump(payload, output_file, ensure_ascii=False, indent=2)
-        output_file.write("\n")
-
-
 def write_report(path: Path, results: dict[str, Any]) -> None:
     metrics = results["metrics"]
     central = results["central_error_analysis"]
-    local_trainable = results["parameter_counts"]["local_encoder_trainable"]
-    if local_trainable:
-        branch_description = (
-            "This experiment combines a frozen PhoWhisper encoder branch with a "
-            "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch. "
-            "Only the selected CNN tail blocks plus the projection, fusion, and "
-            "classification head are trained."
-        )
-    else:
-        branch_description = (
-            "This experiment combines a frozen PhoWhisper encoder branch with a "
-            "frozen trained E2 EfficientNetB0-style log-Mel branch. Only the "
-            "projection, fusion, and classification head are trained."
-        )
+    gate_test = results["gate_diagnostics"].get("test") or {}
+    beta_learned = results["fusion"].get("beta_learned")
+    beta_learned_text = (
+        f"{beta_learned:.4f}" if beta_learned is not None else "N/A"
+    )
     lines = [
-        "# Phase 10 PhoWhisper + CNN Fusion Report",
+        "# Phase 11 PhoWhisper + CNN Residual Fusion Report",
         "",
-        branch_description,
-        "The decoder is not used, and no ASR transcript is generated.",
+        "This experiment keeps the PhoWhisper encoder frozen and uses the trained "
+        "E2 EfficientNetB0-style log-Mel branch as a residual acoustic correction. "
+        "The residual-gated fusion is `z = g + beta * r(g,l) * P(l)`, where the "
+        "PhoWhisper baseline head is warm-started from the frozen PhoWhisper checkpoint.",
         "",
         "| Split | Accuracy | Macro F1 | Central Recall | Central F1 | Loss |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
@@ -461,12 +346,17 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
     lines.extend(
         [
             "",
-            f"Best epoch by validation macro F1: {results['best_epoch']}.",
+            f"Best epoch by `{results['training']['best_score_type']}`: {results['best_epoch']}.",
+            f"Best validation score: {results['best_valid_score']:.4f}.",
             f"Training device: `{results['device']}`.",
             f"Fusion type: `{results['fusion']['type']}`.",
+            f"Beta init: {results['fusion']['beta_init']:.4f}.",
+            f"Beta learned: {beta_learned_text}.",
+            f"Test gate mean: {gate_test.get('overall_mean')}.",
             f"PhoWhisper encoder trainable parameters: {results['parameter_counts']['whisper_encoder_trainable']}.",
             f"EfficientNet local encoder trainable parameters: {results['parameter_counts']['local_encoder_trainable']}.",
             f"EfficientNet trainable child modules: `{', '.join(results['training']['cnn_trainable_child_names']) or 'none'}`.",
+            f"PhoWhisper head warm-start: `{results['fusion']['head_warm_start'].get('loaded')}`.",
             f"EfficientNet checkpoint: `{results['cnn_checkpoint_path']}`.",
             f"Checkpoint: `{results['checkpoint_path']}`.",
             "",
@@ -487,87 +377,9 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def estimate_latency(
-    model: Any,
-    loader: Any,
-    device: Any,
-    sample_count: int,
-) -> dict[str, Any]:
-    torch = require_torch()
-    count = max(sample_count, 0)
-    if count == 0:
-        return {"sample_count": 0, "mean_milliseconds_per_sample": None}
-    elapsed_values: list[float] = []
-    measured = 0
-    model.eval()
-    with torch.no_grad():
-        for batch in loader:
-            batch_size = int(batch["label"].shape[0])
-            for index in range(batch_size):
-                if measured >= count:
-                    break
-                whisper_features = batch["whisper_input_features"][index : index + 1].to(
-                    device
-                )
-                logmel = batch["logmel"][index : index + 1].to(device)
-                synchronize_device(torch, device)
-                started = time.perf_counter()
-                _logits = model(whisper_features, logmel)
-                synchronize_device(torch, device)
-                elapsed_values.append((time.perf_counter() - started) * 1000.0)
-                measured += 1
-            if measured >= count:
-                break
-    return {
-        "sample_count": measured,
-        "mean_milliseconds_per_sample": (
-            float(np.mean(elapsed_values)) if elapsed_values else None
-        ),
-    }
-
-
-def synchronize_device(torch: Any, device: Any) -> None:
-    if device.type == "cuda":
-        torch.cuda.synchronize()
-    elif device.type == "mps" and hasattr(torch, "mps"):
-        torch.mps.synchronize()
-
-
-def central_error_analysis(matrix: np.ndarray, metrics: dict[str, Any]) -> dict[str, Any]:
-    central_index = LABEL_TO_INDEX["Central"]
-    northern_index = LABEL_TO_INDEX["Northern"]
-    southern_index = LABEL_TO_INDEX["Southern"]
-    central_metrics = metrics["per_class"]["Central"]
-    return {
-        "test_central_recall": central_metrics["recall"],
-        "test_central_f1": central_metrics["f1"],
-        "central_to_northern_errors": int(matrix[central_index, northern_index]),
-        "central_to_southern_errors": int(matrix[central_index, southern_index]),
-    }
-
-
-def combined_model_size_mb(args: argparse.Namespace) -> float | None:
-    checkpoint_size = file_size_mb(args.checkpoint_path)
-    encoder_size = hf_cached_model_size_mb(args.cache_dir, args.model_id)
-    cnn_size = file_size_mb(args.cnn_checkpoint_path)
-    if checkpoint_size is None and encoder_size is None and cnn_size is None:
-        return None
-    return float((checkpoint_size or 0.0) + (encoder_size or 0.0) + (cnn_size or 0.0))
-
-
-def ensure_outputs_absent(paths: list[Path]) -> None:
-    existing = [path for path in paths if path.exists()]
-    if existing:
-        formatted = ", ".join(str(path) for path in existing)
-        raise FileExistsError(
-            f"Refusing to overwrite Phase 10 outputs: {formatted}. "
-            "Pass --overwrite to regenerate them."
-        )
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Train Phase 10 hybrid frozen PhoWhisper + CNN fusion model."
+        description="Train Phase 11 residual-gated PhoWhisper + CNN fusion model."
     )
     parser.add_argument(
         "--metadata-path",
@@ -583,62 +395,60 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-path",
         type=Path,
-        default=Path("outputs/models/e7_whisper_cnn_fusion.pt"),
+        default=Path("outputs/models/e8_whisper_cnn_residual_fusion.pt"),
     )
     parser.add_argument(
         "--cnn-checkpoint-path",
         type=Path,
         default=DEFAULT_CNN_CHECKPOINT_PATH,
-        help="Trained E2 EfficientNetB0-style checkpoint for the frozen local branch.",
     )
+    parser.add_argument(
+        "--phowhisper-head-checkpoint-path",
+        type=Path,
+        default=DEFAULT_PHOWHISPER_HEAD_CHECKPOINT_PATH,
+    )
+    parser.add_argument("--skip-phowhisper-head-warm-start", action="store_true")
     parser.add_argument(
         "--metrics-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_results.json"),
+        default=Path("outputs/metrics/e8_whisper_cnn_residual_fusion_results.json"),
     )
     parser.add_argument(
         "--training-log-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_training_log.csv"),
+        default=Path("outputs/metrics/e8_whisper_cnn_residual_fusion_training_log.csv"),
     )
     parser.add_argument(
         "--report-path",
         type=Path,
-        default=Path("outputs/reports/phase10_whisper_cnn_fusion_report.md"),
+        default=Path("outputs/reports/phase11_whisper_cnn_residual_fusion_report.md"),
     )
     parser.add_argument(
         "--valid-confusion-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv"),
+        default=Path(
+            "outputs/metrics/e8_whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
+        ),
     )
     parser.add_argument(
         "--test-confusion-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv"),
+        default=Path(
+            "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv"
+        ),
     )
     parser.add_argument("--device", choices=("auto", "mps", "cuda", "cpu"), default="auto")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--max-epochs", type=int, default=DEFAULT_MAX_EPOCHS)
     parser.add_argument("--patience", type=int, default=DEFAULT_PATIENCE)
-    parser.add_argument("--learning-rate", type=float, default=DEFAULT_LEARNING_RATE)
+    parser.add_argument("--learning-rate", type=float, default=DEFAULT_FUSION_LEARNING_RATE)
+    parser.add_argument("--head-learning-rate", type=float, default=DEFAULT_HEAD_LEARNING_RATE)
+    parser.add_argument("--cnn-learning-rate", type=float, default=DEFAULT_CNN_LEARNING_RATE)
     parser.add_argument("--weight-decay", type=float, default=DEFAULT_WEIGHT_DECAY)
     parser.add_argument("--dropout", type=float, default=DEFAULT_DROPOUT)
-    parser.add_argument(
-        "--cnn-learning-rate",
-        type=float,
-        default=DEFAULT_CNN_LEARNING_RATE,
-        help="Learning rate for trainable EfficientNetB0 local-branch layers.",
-    )
-    parser.add_argument(
-        "--cnn-trainable-layers",
-        type=int,
-        default=DEFAULT_CNN_TRAINABLE_LAYERS,
-        help=(
-            "Number of parameterized local CNN child modules to fine-tune from "
-            "the tail. Use 0 to keep the local branch frozen."
-        ),
-    )
+    parser.add_argument("--beta-init", type=float, default=DEFAULT_BETA_INIT)
+    parser.add_argument("--cnn-trainable-layers", type=int, default=DEFAULT_CNN_TRAINABLE_LAYERS)
     parser.add_argument("--local-embedding-dim", type=int, default=DEFAULT_LOCAL_EMBEDDING_DIM)
     parser.add_argument("--fusion-dim", type=int, default=DEFAULT_FUSION_DIM)
     parser.add_argument(
@@ -648,34 +458,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--fusion-type",
-        choices=("concat", "gated"),
+        choices=("concat", "gated", "residual_gated"),
         default=DEFAULT_FUSION_TYPE,
+    )
+    parser.add_argument(
+        "--best-score-type",
+        choices=("macro_f1", "hybrid_macro_central"),
+        default=DEFAULT_BEST_SCORE_TYPE,
     )
     parser.add_argument("--limit-per-split", type=int, default=None)
     parser.add_argument("--latency-samples", type=int, default=5)
-    parser.add_argument(
-        "--allow-download",
-        action="store_true",
-        help="Allow Hugging Face downloads for the Whisper checkpoint.",
-    )
+    parser.add_argument("--allow-download", action="store_true")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+
     if args.batch_size <= 0:
         raise ValueError("--batch-size must be positive.")
     if args.max_epochs <= 0:
         raise ValueError("--max-epochs must be positive.")
     if args.patience <= 0:
         raise ValueError("--patience must be positive.")
-    if args.learning_rate <= 0:
-        raise ValueError("--learning-rate must be positive.")
-    if args.cnn_learning_rate <= 0:
-        raise ValueError("--cnn-learning-rate must be positive.")
+    for name in ("learning_rate", "head_learning_rate", "cnn_learning_rate"):
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive.")
     if args.cnn_trainable_layers < 0:
         raise ValueError("--cnn-trainable-layers cannot be negative.")
-    if args.local_embedding_dim <= 0:
-        raise ValueError("--local-embedding-dim must be positive.")
-    if args.fusion_dim <= 0:
-        raise ValueError("--fusion-dim must be positive.")
+    if args.local_embedding_dim <= 0 or args.fusion_dim <= 0:
+        raise ValueError("--local-embedding-dim and --fusion-dim must be positive.")
     if args.classifier_hidden_dim <= 0:
         raise ValueError("--classifier-hidden-dim must be positive.")
     if args.limit_per_split is not None and args.limit_per_split <= 0:
@@ -728,6 +537,9 @@ def main() -> None:
         for split in SPLITS
     }
 
+    classifier_head_type = (
+        "phowhisper_linear" if args.fusion_type == "residual_gated" else "mlp"
+    )
     model = WhisperCnnFusionClassifier(
         whisper_encoder=whisper_encoder,
         whisper_hidden_size=infer_whisper_hidden_size(whisper_encoder),
@@ -737,9 +549,20 @@ def main() -> None:
         fusion_dim=args.fusion_dim,
         classifier_hidden_dim=args.classifier_hidden_dim,
         fusion_type=args.fusion_type,
+        classifier_head_type=classifier_head_type,
+        beta_init=args.beta_init,
         dropout=args.dropout,
         freeze_local_encoder=True,
     ).to(device)
+    if args.fusion_type == "residual_gated" and not args.skip_phowhisper_head_warm_start:
+        head_warm_start = load_phowhisper_head_weights(
+            model,
+            args.phowhisper_head_checkpoint_path,
+            device,
+        )
+    else:
+        head_warm_start = {"loaded": False, "reason": "warm-start disabled or unused"}
+
     local_trainable_child_names = model.enable_local_encoder_finetuning(
         args.cnn_trainable_layers
     )
@@ -759,10 +582,13 @@ def main() -> None:
         f"cnn_learning_rate={args.cnn_learning_rate:g}",
         flush=True,
     )
+    print(f"PhoWhisper head warm-start: {head_warm_start}", flush=True)
+
     criterion = torch.nn.CrossEntropyLoss()
     trainable_parameter_groups = optimizer_parameter_groups(
         model,
         learning_rate=args.learning_rate,
+        head_learning_rate=args.head_learning_rate,
         cnn_learning_rate=args.cnn_learning_rate,
     )
     optimizer = torch.optim.AdamW(
@@ -771,7 +597,7 @@ def main() -> None:
     )
 
     best_epoch = 0
-    best_valid_macro_f1 = -1.0
+    best_valid_score = -1.0
     best_state: dict[str, Any] | None = None
     epochs_without_improvement = 0
     training_rows: list[dict[str, Any]] = []
@@ -780,7 +606,7 @@ def main() -> None:
     for epoch in range(1, args.max_epochs + 1):
         epoch_started = time.perf_counter()
         train_metrics = train_one_epoch(model, loaders["train"], optimizer, criterion, device)
-        valid_metrics, _valid_matrix, _true, _pred = evaluate_model(
+        valid_metrics, _valid_matrix, _true, _pred, valid_gate = evaluate_model(
             model,
             loaders["valid"],
             criterion,
@@ -788,6 +614,7 @@ def main() -> None:
         )
         elapsed = time.perf_counter() - epoch_started
         central_valid = valid_metrics["per_class"]["Central"]
+        score = best_score(valid_metrics, args.best_score_type)
         training_rows.append(
             {
                 "epoch": epoch,
@@ -798,25 +625,33 @@ def main() -> None:
                 "valid_macro_f1": f"{valid_metrics['macro_f1']:.6f}",
                 "valid_central_recall": f"{central_valid['recall']:.6f}",
                 "valid_central_f1": f"{central_valid['f1']:.6f}",
+                "valid_best_score": f"{score:.6f}",
+                "valid_gate_mean": (
+                    f"{valid_gate['overall_mean']:.6f}" if valid_gate else ""
+                ),
                 "epoch_seconds": f"{elapsed:.3f}",
             }
         )
         print(
-            f"epoch={epoch} valid_macro_f1={valid_metrics['macro_f1']:.4f} "
+            f"epoch={epoch} valid_score={score:.4f} "
+            f"valid_macro_f1={valid_metrics['macro_f1']:.4f} "
             f"central_recall={central_valid['recall']:.4f} "
             f"central_f1={central_valid['f1']:.4f}",
             flush=True,
         )
-        if valid_metrics["macro_f1"] > best_valid_macro_f1:
-            best_valid_macro_f1 = float(valid_metrics["macro_f1"])
+        if score > best_valid_score:
+            best_valid_score = score
             best_epoch = epoch
             best_state = checkpoint_state(
                 model,
                 epoch,
                 valid_metrics,
+                valid_gate,
                 args,
                 device,
                 parameter_counts,
+                head_warm_start,
+                score,
             )
             epochs_without_improvement = 0
             args.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -835,8 +670,9 @@ def main() -> None:
 
     final_metrics: dict[str, Any] = {}
     final_matrices: dict[str, np.ndarray] = {}
+    gate_diagnostics: dict[str, Any] = {}
     for split in SPLITS:
-        metrics, matrix, _true, _pred = evaluate_model(
+        metrics, matrix, _true, _pred, gate = evaluate_model(
             model,
             loaders[split],
             criterion,
@@ -844,23 +680,30 @@ def main() -> None:
         )
         final_metrics[split] = metrics
         final_matrices[split] = matrix
+        gate_diagnostics[split] = gate
 
     write_confusion_matrix(args.valid_confusion_path, final_matrices["valid"])
     write_confusion_matrix(args.test_confusion_path, final_matrices["test"])
     write_training_log(args.training_log_path, training_rows)
     latency = estimate_latency(model, loaders["test"], device, args.latency_samples)
     central = central_error_analysis(final_matrices["test"], final_metrics["test"])
+    beta_learned = float(model.beta.detach().cpu()) if model.beta is not None else None
+    local_projection_description = (
+        "LayerNorm(128)+Linear(128,512)"
+        if args.fusion_type == "residual_gated"
+        else "LayerNorm(128)+Linear(128,512)+ReLU"
+    )
 
     results = {
         "phase": PHASE,
         "experiment_id": EXPERIMENT_ID,
-        "model_name": "Hybrid frozen PhoWhisper-base encoder + log-Mel CNN fusion",
+        "model_name": "Residual-gated PhoWhisper-base encoder + log-Mel CNN fusion",
         "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
         "pretrained": args.model_id,
         "trainable_setting": (
-            "frozen_whisper_encoder_lightly_finetuned_efficientnetb0_trainable_fusion_head"
+            "frozen_whisper_encoder_lightly_finetuned_efficientnetb0_residual_fusion"
             if args.cnn_trainable_layers > 0
-            else "frozen_whisper_encoder_frozen_efficientnetb0_trainable_fusion_head"
+            else "frozen_whisper_encoder_frozen_efficientnetb0_residual_fusion"
         ),
         "status": "trained",
         "metadata_path": args.metadata_path.as_posix(),
@@ -872,6 +715,7 @@ def main() -> None:
         "cache_dir": args.cache_dir.as_posix(),
         "cnn_checkpoint_path": args.cnn_checkpoint_path.as_posix(),
         "cnn_checkpoint_experiment_id": cnn_checkpoint.get("experiment_id"),
+        "phowhisper_head_checkpoint_path": args.phowhisper_head_checkpoint_path.as_posix(),
         "split_counts_full_metadata": full_counts,
         "split_counts_used": split_label_counts(rows_by_split),
         "feature": {
@@ -879,6 +723,7 @@ def main() -> None:
             "target_samples": TARGET_SAMPLES,
             "duration_sec": TARGET_SAMPLES / TARGET_SAMPLE_RATE,
             "whisper_input": "PhoWhisper/Whisper input_features",
+            "global_embedding": "mean_pool_hidden_state",
             "local_input": "standardized log_mel_spectrogram",
             "local_encoder": (
                 "lightly_finetuned_e2_efficientnetb0_features"
@@ -889,19 +734,36 @@ def main() -> None:
         },
         "fusion": {
             "type": args.fusion_type,
+            "default": DEFAULT_FUSION_TYPE,
             "local_embedding_dim": args.local_embedding_dim,
             "fusion_dim": args.fusion_dim,
             "global_embedding_dim": infer_whisper_hidden_size(whisper_encoder),
-            "global_projection": "identity_layernorm",
+            "global_projection": (
+                "mean_pool_identity"
+                if args.fusion_type == "residual_gated"
+                else "LayerNorm(mean_pool_hidden_state)"
+            ),
+            "local_projection": local_projection_description,
+            "residual_formula": (
+                "z = g + beta * sigmoid(W[g;P(l)] + b) * P(l)"
+                if args.fusion_type == "residual_gated"
+                else None
+            ),
+            "beta_init": args.beta_init,
+            "beta_learned": beta_learned,
+            "classifier_head_type": classifier_head_type,
             "classifier_hidden_dim": args.classifier_hidden_dim,
-            "default": DEFAULT_FUSION_TYPE,
+            "head_warm_start": head_warm_start,
         },
+        "gate_diagnostics": gate_diagnostics,
         "training": {
             "batch_size": args.batch_size,
             "max_epochs": args.max_epochs,
             "epochs_completed": len(training_rows),
             "patience": args.patience,
-            "learning_rate": args.learning_rate,
+            "best_score_type": args.best_score_type,
+            "fusion_learning_rate": args.learning_rate,
+            "head_learning_rate": args.head_learning_rate,
             "cnn_learning_rate": args.cnn_learning_rate,
             "cnn_trainable_layers": args.cnn_trainable_layers,
             "cnn_trainable_child_names": local_trainable_child_names,
@@ -911,7 +773,8 @@ def main() -> None:
         },
         "parameter_counts": parameter_counts,
         "best_epoch": best_epoch,
-        "best_valid_macro_f1": best_valid_macro_f1,
+        "best_valid_score": best_valid_score,
+        "best_valid_macro_f1": best_state["valid_metrics"]["macro_f1"],
         "checkpoint_path": args.checkpoint_path.as_posix(),
         "model_size_mb": combined_model_size_mb(args),
         "classifier_checkpoint_size_mb": file_size_mb(args.checkpoint_path),
@@ -937,29 +800,24 @@ def main() -> None:
             for split in SPLITS
         },
         "comparison_targets": [
-            "e1_mobilenetv3",
-            "e2_efficientnetb0",
             "e4_phowhisper",
+            "e7_whisper_cnn_fusion",
+            "e2_efficientnetb0",
             "e6_whisper_base",
-            "e3_wav2vec2",
         ],
         "notes": (
-            "Frozen PhoWhisper encoder plus "
-            + (
-                "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch; "
-                f"trainable CNN child modules: {', '.join(local_trainable_child_names)}. "
-                if args.cnn_trainable_layers > 0
-                else "frozen trained E2 EfficientNetB0-style log-Mel branch; "
-            )
-            + "Projection, fusion, and classification head are trained. "
-            "No decoder, no ASR transcript, and no personal-background inference."
+            "Frozen PhoWhisper encoder plus residual-gated local EfficientNetB0 "
+            "log-Mel correction. The PhoWhisper projector/classifier head is "
+            "warm-started from the frozen PhoWhisper baseline checkpoint; no decoder, "
+            "no ASR transcript, and no personal-background inference."
         ),
     }
     write_json(args.metrics_path, results)
     write_report(args.report_path, results)
     write_method_comparison_from_available()
     print(
-        f"Phase 10 complete: best_epoch={best_epoch}, "
+        f"Phase 11 complete: best_epoch={best_epoch}, "
+        f"valid_score={best_valid_score:.4f}, "
         f"valid_macro_f1={final_metrics['valid']['macro_f1']:.4f}, "
         f"test_macro_f1={final_metrics['test']['macro_f1']:.4f}, "
         f"test_central_f1={central['test_central_f1']:.4f}",

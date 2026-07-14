@@ -5,8 +5,8 @@ Lightweight Vietnamese speech dialect classification for three regional labels:
 
 The current project state includes metadata preparation, audio preprocessing,
 MFCC baselines, a lightweight CNN, PhoWhisper-base, extended E1-E6 experiments,
-a Phase 10 hybrid PhoWhisper + CNN fusion experiment scaffold, final comparison
-artifacts, and a FastAPI demo app.
+Phase 10/11 PhoWhisper + CNN fusion experiments, final comparison artifacts,
+and a FastAPI demo app.
 
 ## Dataset
 
@@ -137,6 +137,12 @@ Run Phase 10 E7 hybrid PhoWhisper + CNN fusion on Apple MPS:
 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite
 ```
 
+Run Phase 11 E8 residual-gated PhoWhisper + CNN fusion on Apple MPS:
+
+```bash
+scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite
+```
+
 Add `--allow-download` only if `vinai/PhoWhisper-base` is not already cached
 under `outputs/models/hf_cache/`.
 
@@ -146,14 +152,15 @@ Smoke-test the heavier scripts on a tiny subset:
 scripts/train_e3_e5_mps.sh --overwrite --smoke
 scripts/train_e6_whisper_mps.sh --overwrite --smoke
 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke
+scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite --smoke
 ```
 
 ## Current Model Results
 
 The trained rows below are generated from the current local artifacts under
-`outputs/metrics/`. E7 is listed as the next Phase 10 run until its artifacts
-are generated. Model selection should use validation macro F1; test metrics are
-reported for final comparison only.
+`outputs/metrics/`. E7/E8 are listed as pending research runs until their
+artifacts are generated. Model selection should use validation macro F1; test
+metrics are reported for final comparison only.
 
 | Model | Input | Status | Device | Valid Acc | Valid Macro F1 | Test Acc | Test Macro F1 | Size MB | Latency ms/sample |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -167,6 +174,7 @@ reported for final comparison only.
 | E5 ChunkFormer-style local model | Waveform | trained | MPS | 0.6372 | 0.6286 | 0.6427 | 0.6330 | 1.634 | 27.55 |
 | E6 Whisper-base original frozen encoder | Whisper features | trained | MPS | 0.8244 | 0.8229 | 0.8189 | 0.8163 | 79.084 | 86.29 |
 | E7 PhoWhisper + CNN fusion | PhoWhisper features + Log-Mel | pending full run | MPS/CUDA/CPU | N/A | N/A | N/A | N/A | N/A | N/A |
+| E8 Residual-gated PhoWhisper + CNN fusion | PhoWhisper features + Log-Mel | pending full run | MPS/CUDA/CPU | N/A | N/A | N/A | N/A | N/A | N/A |
 
 Current best model by validation macro F1 is E4 PhoWhisper-base frozen encoder
 with validation macro F1 `0.8474` and test macro F1 `0.8348`.
@@ -182,9 +190,15 @@ Important notes:
 - E6 uses original `openai/whisper-base` with the same frozen-encoder
   comparison setup as PhoWhisper-base.
 - E7 freezes the PhoWhisper encoder and reuses the trained E2
-  EfficientNetB0-style log-Mel features branch. It trains only the
-  projection/fusion layers and 3-class classifier head. It does not use the
-  decoder or ASR transcripts.
+  EfficientNetB0-style log-Mel features branch. It trains the projection/fusion
+  layers, the 3-class classifier head, and by default lightly fine-tunes the
+  last two local CNN feature blocks. It does not use the decoder or ASR
+  transcripts.
+- E8 keeps the PhoWhisper encoder frozen, lightly fine-tunes the last two
+  EfficientNetB0-style local CNN blocks, and uses residual-gated fusion
+  `z = g + beta * r(g,l) * P(l)`. Its classifier uses the PhoWhisper baseline
+  projector/classifier warm-start when
+  `outputs/models/phowhisper_pretrained_frozen_encoder.pt` is available.
 - PhoWhisper full fine-tuning exists as a smaller older run
   (`outputs/metrics/phowhisper_results.json`): validation macro F1 `0.6623`,
   test macro F1 `0.7113`, using 300/45/45 train/valid/test rows.
@@ -227,6 +241,30 @@ useful gain.
 E7 predicts only the dataset-defined `Northern`, `Central`, and `Southern`
 labels. It does not infer hometown, identity, ethnicity, or personal background.
 
+## Phase 11 Residual-Gated PhoWhisper + CNN Fusion
+
+Phase 11 adds `e8_whisper_cnn_residual_fusion`, a residual version of the
+PhoWhisper-CNN hybrid. The global branch is the frozen `vinai/PhoWhisper-base`
+encoder with mean-pooled 512-dimensional hidden states. The local branch is the
+trained E2 EfficientNetB0-style log-Mel feature extractor, with the last two
+parameterized feature blocks fine-tuned at `1e-5`.
+
+The default E8 fusion keeps PhoWhisper as the primary representation:
+
+```text
+g = MeanPool(PhoWhisperEncoder(audio))
+l = EfficientNetB0Features(LogMel(audio))
+P(l) = LayerNorm(128) -> Linear(128, 512)
+r = sigmoid(Linear([g; P(l)] -> 512))
+z = g + beta * r * P(l)
+logits = PhoWhisperProjector(512 -> 256) -> PhoWhisperClassifier(256 -> 3)
+```
+
+`beta` is a learnable scalar initialized to `0.1`, and the batch size default is
+`14`. E8 writes separate artifacts under `e8_whisper_cnn_residual_fusion*`, so
+previous E7 outputs are preserved. Legacy `--gated` and `--concat` ablations
+remain available from the E8 runner.
+
 Comparison artifacts:
 
 - `outputs/metrics/model_method_comparison.csv`
@@ -250,6 +288,7 @@ Important checkpoints are written under `outputs/models/`:
 - `e5_vipvl_chunkformer_classifier.pt`
 - `e6_whisper_base_frozen_encoder.pt`
 - `e7_whisper_cnn_fusion.pt`
+- `e8_whisper_cnn_residual_fusion.pt`
 
 The Hugging Face cache is under `outputs/models/hf_cache/`.
 

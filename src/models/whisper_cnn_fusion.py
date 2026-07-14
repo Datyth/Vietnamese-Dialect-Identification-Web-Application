@@ -47,12 +47,18 @@ class WhisperCnnFusionClassifier(nn.Module):
         fusion_dim: int = 256,
         classifier_hidden_dim: int = 256,
         fusion_type: str = "concat",
+        classifier_head_type: str = "mlp",
+        beta_init: float = 0.1,
         dropout: float = 0.0,
         freeze_local_encoder: bool = True,
     ) -> None:
         super().__init__()
-        if fusion_type not in {"concat", "gated"}:
-            raise ValueError("fusion_type must be one of: concat, gated.")
+        if fusion_type not in {"concat", "gated", "residual_gated"}:
+            raise ValueError("fusion_type must be one of: concat, gated, residual_gated.")
+        if classifier_head_type not in {"mlp", "phowhisper_linear"}:
+            raise ValueError("classifier_head_type must be one of: mlp, phowhisper_linear.")
+        if classifier_head_type == "phowhisper_linear" and fusion_type != "residual_gated":
+            raise ValueError("phowhisper_linear classifier head is only supported for residual_gated fusion.")
         if fusion_dim != whisper_hidden_size:
             raise ValueError(
                 "fusion_dim must match whisper_hidden_size because the global "
@@ -62,33 +68,59 @@ class WhisperCnnFusionClassifier(nn.Module):
         self.freeze_local = freeze_local_encoder
         self.local_trainable_child_names: set[str] | None = None
         self.fusion_type = fusion_type
+        self.classifier_head_type = classifier_head_type
+        self.beta_init = float(beta_init)
         self.local_encoder = local_encoder or LocalSpectrogramEncoder(
             embedding_dim=local_embedding_dim,
             dropout=dropout,
         )
-        self.global_norm = nn.LayerNorm(whisper_hidden_size)
-        self.local_projection = nn.Sequential(
-            nn.LayerNorm(local_embedding_dim),
-            nn.Linear(local_embedding_dim, fusion_dim),
-            nn.ReLU(inplace=True),
-            dropout_layer(dropout),
+        self.global_norm = (
+            nn.Identity()
+            if fusion_type == "residual_gated"
+            else nn.LayerNorm(whisper_hidden_size)
         )
+        if fusion_type == "residual_gated":
+            self.local_projection = nn.Sequential(
+                nn.LayerNorm(local_embedding_dim),
+                nn.Linear(local_embedding_dim, fusion_dim),
+            )
+        else:
+            self.local_projection = nn.Sequential(
+                nn.LayerNorm(local_embedding_dim),
+                nn.Linear(local_embedding_dim, fusion_dim),
+                nn.ReLU(inplace=True),
+                dropout_layer(dropout),
+            )
         if fusion_type == "gated":
             self.gate = nn.Sequential(
                 nn.Linear(fusion_dim * 2, fusion_dim),
                 nn.Sigmoid(),
             )
+            self.residual_gate = None
+            self.beta = None
+            classifier_input_dim = fusion_dim
+        elif fusion_type == "residual_gated":
+            self.gate = None
+            self.residual_gate = nn.Linear(fusion_dim * 2, fusion_dim)
+            self.beta = nn.Parameter(torch.tensor(float(beta_init), dtype=torch.float32))
             classifier_input_dim = fusion_dim
         else:
             self.gate = None
+            self.residual_gate = None
+            self.beta = None
             classifier_input_dim = fusion_dim * 2
-        self.classifier = nn.Sequential(
-            nn.LayerNorm(classifier_input_dim),
-            nn.Linear(classifier_input_dim, classifier_hidden_dim),
-            nn.ReLU(inplace=True),
-            dropout_layer(dropout),
-            nn.Linear(classifier_hidden_dim, num_classes),
-        )
+        if classifier_head_type == "phowhisper_linear":
+            self.projector = nn.Linear(classifier_input_dim, classifier_hidden_dim)
+            self.classifier = nn.Linear(classifier_hidden_dim, num_classes)
+        else:
+            self.projector = None
+            self.classifier = nn.Sequential(
+                nn.LayerNorm(classifier_input_dim),
+                nn.Linear(classifier_input_dim, classifier_hidden_dim),
+                nn.ReLU(inplace=True),
+                dropout_layer(dropout),
+                nn.Linear(classifier_hidden_dim, num_classes),
+            )
         self.freeze_whisper_encoder()
         if self.freeze_local:
             self.freeze_local_encoder()
@@ -155,6 +187,17 @@ class WhisperCnnFusionClassifier(nn.Module):
         whisper_input_features: torch.Tensor,
         logmel: torch.Tensor,
     ) -> torch.Tensor:
+        logits, _diagnostics = self.forward_with_diagnostics(
+            whisper_input_features,
+            logmel,
+        )
+        return logits
+
+    def forward_with_diagnostics(
+        self,
+        whisper_input_features: torch.Tensor,
+        logmel: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         with torch.no_grad():
             encoder_outputs = self.whisper_encoder(
                 input_features=whisper_input_features
@@ -170,15 +213,34 @@ class WhisperCnnFusionClassifier(nn.Module):
             local_embedding = torch.flatten(local_embedding, start_dim=1)
         projected_global = self.global_norm(global_embedding)
         projected_local = self.local_projection(local_embedding)
+        diagnostics = {
+            "global_embedding": projected_global,
+            "projected_local": projected_local,
+        }
 
         if self.fusion_type == "gated":
             if self.gate is None:
                 raise RuntimeError("Gated fusion was not initialized.")
             alpha = self.gate(torch.cat([projected_global, projected_local], dim=-1))
             fused = alpha * projected_global + (1.0 - alpha) * projected_local
+            diagnostics["gate"] = alpha
+        elif self.fusion_type == "residual_gated":
+            if self.residual_gate is None or self.beta is None:
+                raise RuntimeError("Residual-gated fusion was not initialized.")
+            gate_input = torch.cat([projected_global, projected_local], dim=-1)
+            residual_gate = torch.sigmoid(self.residual_gate(gate_input))
+            fused = projected_global + self.beta * residual_gate * projected_local
+            diagnostics["residual_gate"] = residual_gate
         else:
             fused = torch.cat([projected_global, projected_local], dim=-1)
-        return self.classifier(fused)
+        diagnostics["fused"] = fused
+        if self.classifier_head_type == "phowhisper_linear":
+            if self.projector is None:
+                raise RuntimeError("PhoWhisper linear head projector was not initialized.")
+            logits = self.classifier(self.projector(fused))
+        else:
+            logits = self.classifier(fused)
+        return logits, diagnostics
 
 
 def conv_block(in_channels: int, out_channels: int) -> nn.Sequential:

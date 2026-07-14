@@ -809,7 +809,61 @@ Fallback:
 
 
 
-### Phase 11: Final report, reproducibility and cleanup
+### Phase 11: Residual-Gated PhoWhisper + CNN Fusion Experiment
+
+**Scope**
+
+- Thực nghiệm E8 như một biến thể cải tiến của E7, vẫn chỉ phân loại 3 nhãn
+  `Northern`, `Central`, `Southern`.
+- Giữ frozen `vinai/PhoWhisper-base` encoder làm global branch chính. Global
+  embedding là mean-pooled hidden state 512 chiều.
+- Local branch dùng E2 EfficientNetB0-style log-Mel checkpoint. Mặc định
+  fine-tune nhẹ 2 child module có tham số cuối với `cnn_learning_rate=1e-5`.
+- Fusion mặc định là residual-gated:
+  `z = g + beta * sigmoid(W[g;P(l)] + b) * P(l)`.
+- `P(l)` project local embedding `128 -> 512` bằng `LayerNorm(128)` và
+  `Linear(128,512)`; final projection không dùng ReLU để residual có thể cộng
+  hoặc trừ theo từng feature.
+- `beta` là learnable scalar, khởi tạo `0.1`. Khi `beta=0`, fused embedding
+  giảm đúng về PhoWhisper global embedding.
+- Classifier dùng projector/classifier của PhoWhisper baseline:
+  `Linear(512,256) -> Linear(256,3)`, warm-start từ
+  `outputs/models/phowhisper_pretrained_frozen_encoder.pt` nếu có.
+- Batch size mặc định là `14` cho Apple MPS full-RAM run. Không dùng dropout
+  mặc định.
+- Giữ `concat` và legacy `gated` làm ablation nếu cần.
+
+**Expected outputs**
+
+- `configs/experiments/e8_whisper_cnn_residual_fusion.yaml`.
+- `src/training/train_e8_whisper_cnn_residual_fusion.py`.
+- `scripts/train_e8_whisper_cnn_residual_fusion_mps.sh`.
+- `outputs/models/e8_whisper_cnn_residual_fusion.pt`.
+- `outputs/metrics/e8_whisper_cnn_residual_fusion_results.json`.
+- `outputs/metrics/e8_whisper_cnn_residual_fusion_training_log.csv`.
+- `outputs/metrics/e8_whisper_cnn_residual_fusion_valid_confusion_matrix.csv`.
+- `outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv`.
+- `outputs/reports/phase11_whisper_cnn_residual_fusion_report.md`.
+- Updated `outputs/metrics/model_method_comparison.csv` after E8 training.
+
+**Diagnostics to record**
+
+- Fusion type, beta init, beta learned.
+- Overall residual gate mean and mean gate value by true dialect class.
+- Trainable parameter counts.
+- CNN fine-tuning child module names and CNN learning rate.
+- PhoWhisper head warm-start metadata.
+
+**Interpretation criteria**
+
+- E8 is useful only if it improves validation macro F1 or Central F1/recall over
+  E4/E7 without adding too much latency.
+- If E8 underperforms E4, report that the residual local branch did not add
+  enough complementary signal for this dataset/run.
+
+
+
+### Phase 12: Final report, reproducibility and cleanup
 
 **Scope**
 

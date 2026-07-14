@@ -20,6 +20,14 @@ from src.training.train_e7_whisper_cnn_fusion import (
     checkpoint_state,
     optimizer_parameter_groups,
 )
+from src.training.train_e8_whisper_cnn_residual_fusion import (
+    DEFAULT_BATCH_SIZE as E8_DEFAULT_BATCH_SIZE,
+    DEFAULT_BEST_SCORE_TYPE as E8_DEFAULT_BEST_SCORE_TYPE,
+    DEFAULT_BETA_INIT as E8_DEFAULT_BETA_INIT,
+    DEFAULT_FUSION_TYPE as E8_DEFAULT_FUSION_TYPE,
+    checkpoint_state as e8_checkpoint_state,
+    load_phowhisper_head_weights,
+)
 from src.training.train_extended_deep_learning import (
     append_phase10_comparison_row,
 )
@@ -97,6 +105,97 @@ class WhisperCnnFusionModelTests(unittest.TestCase):
         self.assertEqual(tuple(logits.shape), (2, 3))
         self.assertEqual(tuple(model.classifier[1].weight.shape), (10, 24))
         self.assertEqual(tuple(model.classifier[4].weight.shape), (3, 10))
+
+    def test_residual_gated_forward_returns_three_class_logits_and_gate(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_embedding_dim=8,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+            beta_init=0.1,
+        )
+
+        logits, diagnostics = model.forward_with_diagnostics(
+            torch.randn(2, 80, 100),
+            torch.randn(2, 1, 64, 99),
+        )
+
+        gate = diagnostics["residual_gate"]
+        self.assertEqual(tuple(logits.shape), (2, 3))
+        self.assertEqual(tuple(gate.shape), (2, 16))
+        self.assertTrue(bool(torch.all(gate >= 0.0)))
+        self.assertTrue(bool(torch.all(gate <= 1.0)))
+        self.assertEqual(tuple(model.projector.weight.shape), (6, 16))
+        self.assertEqual(tuple(model.classifier.weight.shape), (3, 6))
+
+    def test_residual_beta_zero_reduces_to_global_embedding(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_embedding_dim=8,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+            beta_init=0.1,
+        )
+        with torch.no_grad():
+            model.beta.fill_(0.0)
+
+        logits, diagnostics = model.forward_with_diagnostics(
+            torch.randn(2, 80, 100),
+            torch.randn(2, 1, 64, 99),
+        )
+        expected_logits = model.classifier(model.projector(diagnostics["global_embedding"]))
+
+        self.assertTrue(torch.allclose(diagnostics["fused"], diagnostics["global_embedding"]))
+        self.assertTrue(torch.allclose(logits, expected_logits))
+
+    def test_residual_gated_gradients_reach_trainable_parts_only(self):
+        torch.manual_seed(42)
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+            beta_init=0.1,
+        )
+        selected = model.enable_local_encoder_finetuning(trainable_layers=1)
+
+        logits = model(
+            torch.randn(2, 80, 100),
+            torch.randn(2, 1, 64, 99),
+        )
+        loss = torch.nn.CrossEntropyLoss()(logits, torch.tensor([0, 2]))
+        loss.backward()
+
+        self.assertEqual(selected, ["0"])
+        self.assertIsNotNone(model.beta.grad)
+        self.assertGreater(float(model.beta.grad.detach().abs().sum()), 0.0)
+        self.assertIsNotNone(model.residual_gate.weight.grad)
+        self.assertGreater(float(model.residual_gate.weight.grad.detach().abs().sum()), 0.0)
+        self.assertIsNotNone(model.local_projection[1].weight.grad)
+        self.assertGreater(float(model.local_projection[1].weight.grad.detach().abs().sum()), 0.0)
+        self.assertIsNotNone(model.local_encoder[0].weight.grad)
+        self.assertGreater(float(model.local_encoder[0].weight.grad.detach().abs().sum()), 0.0)
+        self.assertTrue(all(parameter.grad is None for parameter in encoder.parameters()))
 
     def test_fusion_dim_must_match_global_embedding_dim(self):
         encoder = FakeWhisperEncoder(hidden_size=24)
@@ -280,6 +379,146 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         )
 
         self.assertEqual([group["lr"] for group in groups], [1e-4, 1e-5])
+
+    def test_optimizer_can_use_separate_residual_head_lr(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+        )
+        model.enable_local_encoder_finetuning(trainable_layers=1)
+
+        groups = optimizer_parameter_groups(
+            model,
+            learning_rate=1e-4,
+            head_learning_rate=3e-5,
+            cnn_learning_rate=1e-5,
+        )
+
+        self.assertEqual([group["lr"] for group in groups], [1e-4, 3e-5, 1e-5])
+
+    def test_phase11_e8_defaults(self):
+        self.assertEqual(E8_DEFAULT_FUSION_TYPE, "residual_gated")
+        self.assertEqual(E8_DEFAULT_BATCH_SIZE, 14)
+        self.assertEqual(E8_DEFAULT_BETA_INIT, 0.1)
+        self.assertEqual(E8_DEFAULT_BEST_SCORE_TYPE, "hybrid_macro_central")
+
+    def test_e8_loads_phowhisper_linear_head_weights(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_embedding_dim=4,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+        )
+        checkpoint = {
+            "label_order": ("Northern", "Central", "Southern"),
+            "model_state_dict": {
+                "projector.weight": torch.ones_like(model.projector.weight),
+                "projector.bias": torch.ones_like(model.projector.bias),
+                "classifier.weight": torch.ones_like(model.classifier.weight) * 2.0,
+                "classifier.bias": torch.ones_like(model.classifier.bias) * 2.0,
+            },
+            "model": "PhoWhisperClassifier",
+            "training_mode": "frozen_encoder",
+            "valid_metrics": {"macro_f1": 0.84},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "phowhisper.pt"
+            torch.save(checkpoint, path)
+
+            summary = load_phowhisper_head_weights(model, path, torch.device("cpu"))
+
+        self.assertTrue(summary["loaded"])
+        self.assertAlmostEqual(summary["source_valid_macro_f1"], 0.84)
+        self.assertTrue(torch.equal(model.projector.weight, checkpoint["model_state_dict"]["projector.weight"]))
+        self.assertTrue(torch.equal(model.classifier.bias, checkpoint["model_state_dict"]["classifier.bias"]))
+
+    def test_e8_checkpoint_preserves_beta_and_residual_config(self):
+        encoder = FakeWhisperEncoder(hidden_size=16)
+        local_encoder = torch.nn.Sequential(
+            torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+            torch.nn.AdaptiveAvgPool2d((1, 1)),
+        )
+        model = WhisperCnnFusionClassifier(
+            whisper_encoder=encoder,
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=local_encoder,
+            local_embedding_dim=4,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+            beta_init=0.1,
+        )
+        model.enable_local_encoder_finetuning(trainable_layers=1)
+        with torch.no_grad():
+            model.beta.fill_(0.37)
+        args = SimpleNamespace(
+            model_id=DEFAULT_MODEL_ID,
+            cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
+            fusion_type="residual_gated",
+            fusion_dim=16,
+            local_embedding_dim=4,
+            classifier_hidden_dim=6,
+            cnn_trainable_layers=1,
+            beta_init=0.1,
+            learning_rate=1e-4,
+            head_learning_rate=3e-5,
+            cnn_learning_rate=1e-5,
+            seed=42,
+        )
+
+        state = e8_checkpoint_state(
+            model,
+            epoch=2,
+            valid_metrics={"macro_f1": 0.5, "per_class": {"Central": {"f1": 0.4}}},
+            valid_gate_diagnostics={"overall_mean": 0.51},
+            args=args,
+            device=torch.device("cpu"),
+            parameter_counts=count_parameters(model),
+            head_warm_start={"loaded": True},
+            score=0.47,
+        )
+        reloaded = WhisperCnnFusionClassifier(
+            whisper_encoder=FakeWhisperEncoder(hidden_size=16),
+            whisper_hidden_size=16,
+            num_classes=3,
+            local_encoder=torch.nn.Sequential(
+                torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
+                torch.nn.AdaptiveAvgPool2d((1, 1)),
+            ),
+            local_embedding_dim=4,
+            fusion_dim=16,
+            classifier_hidden_dim=6,
+            fusion_type="residual_gated",
+            classifier_head_type="phowhisper_linear",
+        )
+        reloaded.load_state_dict(state["model_state_dict"], strict=False)
+
+        self.assertEqual(state["experiment_id"], "e8_whisper_cnn_residual_fusion")
+        self.assertEqual(state["fusion_type"], "residual_gated")
+        self.assertAlmostEqual(state["beta_init"], 0.1)
+        self.assertAlmostEqual(state["beta_learned"], 0.37, places=6)
+        self.assertEqual(state["valid_gate_diagnostics"]["overall_mean"], 0.51)
+        self.assertEqual(state["head_warm_start"]["loaded"], True)
+        self.assertAlmostEqual(float(reloaded.beta.detach()), 0.37, places=6)
 
     def test_phase10_comparison_row_is_collected_from_metrics_json(self):
         payload = {

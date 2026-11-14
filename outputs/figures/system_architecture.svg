@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+  <title id="title">Vietnamese dialect identification system architecture</title>
+  <desc id="desc">Offline ViMD data preparation and model evaluation above, and the local FastAPI inference flow below. E7 and E8 are research experiments, while the app supports SVM, lightweight CNN, and PhoWhisper.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif; fill: #272727; }
+      .title { font-size: 34px; font-weight: 700; }
+      .subtitle { font-size: 17px; fill: #4d4d4d; }
+      .section { font-size: 21px; font-weight: 700; letter-spacing: 1.2px; fill: #0f4d92; }
+      .step { font-size: 13px; font-weight: 700; letter-spacing: 1px; fill: #767676; }
+      .head { font-size: 21px; font-weight: 700; }
+      .body { font-size: 17px; }
+      .small { font-size: 15px; fill: #4d4d4d; }
+      .tiny { font-size: 13px; fill: #4d4d4d; }
+      .white { fill: white; }
+      .blue { fill: #0f4d92; }
+      .line { fill: none; stroke: #3775ba; stroke-width: 3; marker-end: url(#arrow); }
+      .branch { fill: none; stroke: #767676; stroke-width: 2.5; marker-end: url(#arrowGray); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#3775ba"/></marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#767676"/></marker>
+  </defs>
+  <rect width="1500" height="900" fill="#ffffff"/>
+  <rect x="40" y="31" width="10" height="55" rx="5" fill="#0f4d92"/>
+  <text class="title" x="70" y="63">Vietnamese Dialect Identification</text>
+  <text class="subtitle" x="70" y="88">Three regional labels  ·  shared audio preprocessing  ·  research and local demo</text>
+
+  <rect x="40" y="118" width="1420" height="430" rx="20" fill="#f7f9fc" stroke="#d6e1ed" stroke-width="2"/>
+  <text class="section" x="70" y="153">01  OFFLINE DATA AND MODEL RESEARCH</text>
+
+  <text class="step" x="80" y="188">SOURCE</text>
+  <rect x="75" y="202" width="210" height="153" rx="14" fill="#ffffff" stroke="#0f4d92" stroke-width="2"/>
+  <rect x="75" y="202" width="210" height="10" rx="5" fill="#0f4d92"/>
+  <text class="head" x="94" y="247">ViMD speech</text>
+  <text class="body" x="94" y="280">18,949 metadata rows</text>
+  <text class="body" x="94" y="307">13,894 selected audio</text>
+  <text class="small" x="94" y="336">train / validation / test</text>
+
+  <text class="step" x="326" y="188">SHARED PREPROCESSING</text>
+  <rect x="320" y="202" width="242" height="153" rx="14" fill="#e8f1fb" stroke="#3775ba" stroke-width="2"/>
+  <text class="head" x="340" y="244">Audio pipeline</text>
+  <text class="body" x="340" y="275">mono · resample 16 kHz</text>
+  <text class="body" x="340" y="302">trim · normalize RMS</text>
+  <text class="body" x="340" y="329">center crop / pad 16 s</text>
+  <path class="line" d="M285 278 H314"/>
+
+  <text class="step" x="607" y="188">FEATURES</text>
+  <rect x="602" y="202" width="255" height="68" rx="12" fill="#ddf3de" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="622" y="232">MFCC</text>
+  <text class="small" x="622" y="255">13 coefficients · mean/std</text>
+  <rect x="602" y="284" width="255" height="68" rx="12" fill="#ddf3de" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="622" y="314">Log-Mel</text>
+  <text class="small" x="622" y="337">64 mel bands · time frames</text>
+  <rect x="602" y="366" width="255" height="68" rx="12" fill="#ddf3de" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="622" y="396">Waveform / encoder</text>
+  <text class="small" x="622" y="419">16 kHz audio · Whisper features</text>
+  <path class="branch" d="M562 278 H578 V236 H596"/>
+  <path class="branch" d="M562 278 H596 V318"/>
+  <path class="branch" d="M562 278 H578 V400 H596"/>
+
+  <text class="step" x="894" y="188">MODELS</text>
+  <rect x="889" y="202" width="260" height="68" rx="12" fill="#ffffff" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="909" y="232">Classical baseline</text>
+  <text class="small" x="909" y="255">Logistic Regression · SVM</text>
+  <rect x="889" y="284" width="260" height="68" rx="12" fill="#ffffff" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="909" y="314">Spectrogram CNNs</text>
+  <text class="small" x="909" y="337">CNN · E1 · E2</text>
+  <rect x="889" y="366" width="260" height="68" rx="12" fill="#ffffff" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="909" y="396">Speech encoders</text>
+  <text class="small" x="909" y="419">E3 · E4 · E5 · E6</text>
+  <path class="branch" d="M857 236 H883"/>
+  <path class="branch" d="M857 318 H883"/>
+  <path class="branch" d="M857 400 H883"/>
+
+  <text class="step" x="1193" y="188">EVALUATION</text>
+  <rect x="1188" y="202" width="232" height="232" rx="14" fill="#e8f1fb" stroke="#3775ba" stroke-width="2"/>
+  <text class="head" x="1208" y="243">Compare models</text>
+  <text class="body" x="1208" y="277">validation macro F1</text>
+  <text class="body" x="1208" y="307">test metrics</text>
+  <text class="body" x="1208" y="337">confusion matrices</text>
+  <rect x="1208" y="361" width="191" height="51" rx="9" fill="#0f4d92"/>
+  <text class="white" x="1223" y="383" style="font-size:14px;font-weight:700">Best: E4 PhoWhisper</text>
+  <text class="white" x="1223" y="402" style="font-size:13px">valid F1 0.8474</text>
+  <path class="line" d="M1149 318 H1182"/>
+
+  <rect x="602" y="457" width="818" height="66" rx="12" fill="#fff1ee" stroke="#b64342" stroke-width="2"/>
+  <text x="622" y="484" style="font-size:18px;font-weight:700;fill:#b64342">Research extensions</text>
+  <text class="small" x="622" y="507">E7 gated fusion and E8 residual-gated fusion combine PhoWhisper with E2 log-Mel features.</text>
+  <path class="branch" d="M1019 434 V450"/>
+
+  <rect x="40" y="575" width="1420" height="255" rx="20" fill="#f7f9fc" stroke="#d6e1ed" stroke-width="2"/>
+  <text class="section" x="70" y="610">02  LOCAL FASTAPI WEB DEMO</text>
+  <text class="step" x="80" y="646">INPUT</text>
+  <rect x="75" y="661" width="220" height="113" rx="14" fill="#ffffff" stroke="#0f4d92" stroke-width="2"/>
+  <text class="head" x="96" y="702">Upload audio</text>
+  <text class="small" x="96" y="732">Browser → POST /predict</text>
+  <text class="tiny" x="96" y="756">local file · user-selected model</text>
+
+  <text class="step" x="344" y="646">SAME AUDIO PIPELINE</text>
+  <rect x="340" y="661" width="245" height="113" rx="14" fill="#e8f1fb" stroke="#3775ba" stroke-width="2"/>
+  <text class="head" x="361" y="702">Preprocess</text>
+  <text class="small" x="361" y="732">mono · 16 kHz · 16 s</text>
+  <text class="tiny" x="361" y="756">shared training/inference code</text>
+  <path class="line" d="M295 717 H334"/>
+
+  <text class="step" x="636" y="646">SELECTABLE MODEL</text>
+  <rect x="630" y="661" width="438" height="113" rx="14" fill="#ddf3de" stroke="#68a86b" stroke-width="2"/>
+  <text class="head" x="650" y="699">SVM  ·  Lightweight CNN  ·  PhoWhisper</text>
+  <text class="small" x="650" y="730">MFCC   /   Log-Mel   /   encoder features</text>
+  <text class="tiny" x="650" y="756">E7 and E8 are evaluation experiments; not app options</text>
+  <path class="line" d="M585 717 H624"/>
+
+  <text class="step" x="1114" y="646">OUTPUT</text>
+  <rect x="1109" y="661" width="311" height="113" rx="14" fill="#ffffff" stroke="#0f4d92" stroke-width="2"/>
+  <text class="head" x="1130" y="702">Regional prediction</text>
+  <text class="small" x="1130" y="730">Northern · Central · Southern</text>
+  <text class="tiny" x="1130" y="756">display score is uncalibrated</text>
+  <path class="line" d="M1068 717 H1103"/>
+
+  <text class="tiny" x="75" y="865">Source: project code and saved metrics · Figure style informed by the local figures4papers reference · No speaker identity or hometown inference</text>
+</svg>

@@ -227,3 +227,6 @@ data/**/*.wav
 data/**/*.part
 outputs/models/
 outputs/logs/
+
+# Local reference clone for architecture figure styling
+figures4papers/

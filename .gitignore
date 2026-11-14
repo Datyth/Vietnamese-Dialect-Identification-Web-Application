@@ -230,3 +230,7 @@ outputs/logs/
 
 # Local reference clone for architecture figure styling
 figures4papers/
+
+# Keep only the root README as tracked Markdown documentation
+*.md
+!/README.md

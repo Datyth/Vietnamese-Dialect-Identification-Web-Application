@@ -22,6 +22,26 @@ The image below shows one example of the waveform and two feature representation
 
 ![Example waveform, MFCC heatmap, and log-Mel spectrogram](outputs/figures/feature_visualization/individual_samples/Northern_sample_01_features.png)
 
+## Experimental results
+
+The table summarizes saved results on the prepared ViMD validation and test splits. Accuracy and macro F1 are shown as percentages. PhoWhisper-base reuses the Phase 6 trained model in the extended comparison.
+
+| Model | Validation accuracy | Validation macro F1 | Test accuracy | Test macro F1 |
+| --- | ---: | ---: | ---: | ---: |
+| Logistic Regression | 56.2 | 56.1 | 54.7 | 54.6 |
+| SVM | 56.9 | 56.9 | 55.9 | 55.9 |
+| Lightweight CNN | 60.9 | 60.5 | 61.9 | 61.2 |
+| MobileNetV3 | 67.8 | 67.2 | 70.0 | 69.4 |
+| EfficientNet-B0 | 71.9 | 71.3 | 70.0 | 69.3 |
+| wav2vec2 | 63.4 | 60.6 | 61.8 | 58.1 |
+| **PhoWhisper-base** | **84.8** | **84.7** | **83.7** | **83.5** |
+| ChunkFormer-style classifier | 63.7 | 62.9 | 64.3 | 63.3 |
+| Whisper-base | 82.4 | 82.3 | 81.9 | 81.6 |
+| PhoWhisper + CNN fusion | 82.4 | 81.9 | 80.2 | 79.5 |
+| PhoWhisper + CNN residual fusion | 84.2 | 84.0 | 81.3 | 80.8 |
+
+The complete saved comparison is in [model_method_comparison.csv](outputs/metrics/model_method_comparison.csv).
+
 ## Requirements
 
 - Python 3.10 or newer

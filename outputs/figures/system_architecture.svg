@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
   <title id="title">Vietnamese dialect identification system architecture</title>
-  <desc id="desc">Offline ViMD data preparation and model evaluation above, and the local FastAPI inference flow below. E7 and E8 are research experiments, while the app supports SVM, lightweight CNN, and PhoWhisper.</desc>
+  <desc id="desc">Offline ViMD data preparation and model evaluation above, and the local FastAPI inference flow below. Fusion models are evaluated offline, while the app supports SVM, lightweight CNN, and PhoWhisper.</desc>
   <defs>
     <style>
       text { font-family: Arial, Helvetica, 'DejaVu Sans', sans-serif; fill: #272727; }
@@ -64,10 +64,10 @@
   <text class="small" x="909" y="255">Logistic Regression · SVM</text>
   <rect x="889" y="284" width="260" height="68" rx="12" fill="#ffffff" stroke="#68a86b" stroke-width="2"/>
   <text class="head" x="909" y="314">Spectrogram CNNs</text>
-  <text class="small" x="909" y="337">CNN · E1 · E2</text>
+  <text class="small" x="909" y="337">lightweight and deeper CNNs</text>
   <rect x="889" y="366" width="260" height="68" rx="12" fill="#ffffff" stroke="#68a86b" stroke-width="2"/>
   <text class="head" x="909" y="396">Speech encoders</text>
-  <text class="small" x="909" y="419">E3 · E4 · E5 · E6</text>
+  <text class="small" x="909" y="419">pretrained and local models</text>
   <path class="branch" d="M857 236 H883"/>
   <path class="branch" d="M857 318 H883"/>
   <path class="branch" d="M857 400 H883"/>
@@ -79,13 +79,13 @@
   <text class="body" x="1208" y="307">test metrics</text>
   <text class="body" x="1208" y="337">confusion matrices</text>
   <rect x="1208" y="361" width="191" height="51" rx="9" fill="#0f4d92"/>
-  <text class="white" x="1223" y="383" style="font-size:14px;font-weight:700">Best: E4 PhoWhisper</text>
-  <text class="white" x="1223" y="402" style="font-size:13px">valid F1 0.8474</text>
+  <text class="white" x="1223" y="383" style="font-size:14px;font-weight:700">Select by validation</text>
+  <text class="white" x="1223" y="402" style="font-size:13px">macro F1 and accuracy</text>
   <path class="line" d="M1149 318 H1182"/>
 
   <rect x="602" y="457" width="818" height="66" rx="12" fill="#fff1ee" stroke="#b64342" stroke-width="2"/>
   <text x="622" y="484" style="font-size:18px;font-weight:700;fill:#b64342">Research extensions</text>
-  <text class="small" x="622" y="507">E7 gated fusion and E8 residual-gated fusion combine PhoWhisper with E2 log-Mel features.</text>
+  <text class="small" x="622" y="507">Fusion models combine speech encoder and log-Mel representations for offline evaluation.</text>
   <path class="branch" d="M1019 434 V450"/>
 
   <rect x="40" y="575" width="1420" height="255" rx="20" fill="#f7f9fc" stroke="#d6e1ed" stroke-width="2"/>
@@ -107,7 +107,7 @@
   <rect x="630" y="661" width="438" height="113" rx="14" fill="#ddf3de" stroke="#68a86b" stroke-width="2"/>
   <text class="head" x="650" y="699">SVM  ·  Lightweight CNN  ·  PhoWhisper</text>
   <text class="small" x="650" y="730">MFCC   /   Log-Mel   /   encoder features</text>
-  <text class="tiny" x="650" y="756">E7 and E8 are evaluation experiments; not app options</text>
+  <text class="tiny" x="650" y="756">Fusion models are evaluated offline, not app options</text>
   <path class="line" d="M585 717 H624"/>
 
   <text class="step" x="1114" y="646">OUTPUT</text>

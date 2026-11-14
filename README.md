@@ -1,371 +1,116 @@
-# Vietnamese Dialect Identification Web Application
+# Vietnamese Dialect Identification
 
-Lightweight Vietnamese speech dialect classification for three regional labels:
-`Northern`, `Central`, and `Southern`.
+A research pipeline and local web demo for classifying Vietnamese speech into three **dataset-defined regional labels**: `Northern`, `Central`, and `Southern`. The project covers ViMD metadata preparation, fixed-length audio preprocessing, MFCC baselines, neural experiments, evaluation, and a FastAPI upload interface.
 
-The current project state includes metadata preparation, audio preprocessing,
-MFCC baselines, a lightweight CNN, PhoWhisper-base, extended E1-E6 experiments,
-Phase 10/11 PhoWhisper + CNN fusion experiments, final comparison artifacts,
-and a FastAPI demo app.
+![System architecture](outputs/figures/system_architecture.svg)
 
-## Dataset
+The diagram shows the offline research workflow and the models actually available in the web app. E7 and E8 are evaluated research models; the app currently offers SVM, lightweight CNN, and PhoWhisper.
 
-The project uses the official
-[ViMD dataset](https://huggingface.co/datasets/nguyendv02/ViMD_Dataset) and maps
-its source regions into three project labels:
+## Results
 
-| ViMD region | Project label |
-| --- | --- |
-| `North` | `Northern` |
-| `Central` | `Central` |
-| `South` | `Southern` |
+The table below comes from [`outputs/metrics/model_method_comparison.csv`](outputs/metrics/model_method_comparison.csv). Model choice is based on **validation macro F1**; test results describe the saved evaluation runs. Values are rounded to four decimals.
 
-Current prepared metadata:
+| Model | Method | Validation macro F1 | Test macro F1 |
+| --- | --- | ---: | ---: |
+| Logistic Regression | MFCC mean/std | 0.5612 | 0.5463 |
+| SVM | MFCC mean/std | 0.5688 | 0.5592 |
+| Lightweight CNN | Log-Mel | 0.6052 | 0.6115 |
+| E1 MobileNetV3-style | Log-Mel, local implementation | 0.6719 | 0.6941 |
+| E2 EfficientNet-B0-style | Log-Mel, local implementation | 0.7127 | 0.6932 |
+| E3 wav2vec2 Vietnamese | Frozen encoder | 0.6063 | 0.5809 |
+| **E4 PhoWhisper-base** | **Frozen encoder** | **0.8474** | **0.8348** |
+| E5 ChunkFormer-style | Waveform, local implementation | 0.6286 | 0.6330 |
+| E6 Whisper-base | Frozen encoder | 0.8229 | 0.8163 |
+| E7 PhoWhisper + CNN | Gated fusion | 0.8194 | 0.7947 |
+| E8 PhoWhisper + CNN | Residual-gated fusion | 0.8395 | 0.8085 |
 
-| Item | Count |
-| --- | ---: |
-| Official metadata rows | 18,949 |
-| Provinces | 63 |
-| Speakers in metadata | 12,953 |
-| Downloaded local audio rows | 13,894 |
-| Not selected under local data budget | 5,055 |
-| Preprocessed rows | 13,894 |
-| Preprocessing issues | 0 |
+E4 has the highest saved validation macro F1. E8 improves on E7 but does not exceed E4 in this run. E1, E2, and E5 are locally implemented architectures; their names do not imply official pretrained MobileNetV3, EfficientNet-B0, or ViP-VL/ChunkFormer checkpoints. E4 reuses the Phase 6 frozen-encoder result. See the [method comparison](outputs/metrics/model_method_comparison.csv), [E7 report](outputs/reports/phase10_whisper_cnn_fusion_report.md), [E8 report](outputs/reports/phase11_whisper_cnn_residual_fusion_report.md), and [Central class analysis](docs/central_class_data_analysis.md) for details.
 
-Current downloaded/preprocessed split:
+The older [`final_comparison.csv`](outputs/metrics/final_comparison.csv) was generated from a smaller Phase 7 run. Use `model_method_comparison.csv` for the full 13,894-sample research comparison; do not combine rows from the two tables.
 
-| Split | Northern | Central | Southern | Total |
+## Data and preprocessing
+
+The source is [ViMD](https://huggingface.co/datasets/nguyendv02/ViMD_Dataset), recorded in the project metadata with license `CC-BY-NC-ND-4.0`. The source regions map as `North → Northern`, `Central → Central`, and `South → Southern`.
+
+| Saved subset | Northern | Central | Southern | Total |
 | --- | ---: | ---: | ---: | ---: |
 | Train | 3,708 | 3,416 | 3,854 | 10,978 |
 | Validation | 486 | 487 | 485 | 1,458 |
 | Test | 486 | 487 | 485 | 1,458 |
-| Total | 4,680 | 4,390 | 4,824 | 13,894 |
+| **Total** | **4,680** | **4,390** | **4,824** | **13,894** |
 
-Speaker IDs in the prepared subset:
+The saved summary records 18,949 source metadata rows and 13,894 selected audio rows under a 10 GB local data budget. The shared pipeline converts to mono, resamples to 16 kHz, trims silence, normalizes level, and center-crops or pads to 16 seconds (256,000 samples). Source splits are retained. One selected speaker ID appears in both validation and test; see [`selected_speaker_split_overlap.csv`](data/processed/selected_speaker_split_overlap.csv). Treat the reported test scores with that caveat.
 
-| Label | Speaker IDs |
-| --- | ---: |
-| Northern | 3,419 |
-| Central | 3,022 |
-| Southern | 3,101 |
-| Total unique speaker IDs | 9,542 |
+The CSV metadata and metrics are committed, but raw/processed WAV files, model checkpoints, and Hugging Face cache are ignored. A fresh clone needs to acquire audio and train or supply compatible checkpoints before running predictions. Relevant paths:
 
-Preprocessing converts audio to mono 16 kHz waveform, trims silence, normalizes
-volume, and center-crops or pads every sample to exactly 16 seconds
-(`256,000` samples). Original duration statistics in the current subset are:
-min `1.054s`, median `19.117s`, mean `19.157s`, max `32.240s`.
+- [`data/processed/preprocessed_metadata.csv`](data/processed/preprocessed_metadata.csv): audio manifest and preprocessing fields.
+- [`outputs/reports/phase1_dataset_summary.json`](outputs/reports/phase1_dataset_summary.json): source and subset counts.
+- [`outputs/reports/phase2_preprocessing_summary.json`](outputs/reports/phase2_preprocessing_summary.json): waveform shape and preprocessing summary.
+- `data/processed/audio_preprocessed_16s/`: generated training audio, absent from Git.
+- `outputs/models/`: generated checkpoints and Hugging Face cache, absent from Git.
 
-Key dataset artifacts:
+## Setup
 
-- `data/processed/metadata_clean.csv`
-- `data/processed/preprocessed_metadata.csv`
-- `data/processed/audio_preprocessed_16s/`
-- `data/processed/class_counts.csv`
-- `data/processed/split_class_counts.csv`
-- `data/processed/speaker_counts.csv`
-- `outputs/reports/phase1_dataset_summary.json`
-- `outputs/reports/phase2_preprocessing_summary.json`
-
-## Environment
-
-Create and install the local environment:
+Use Python 3.10 or newer. From the repository root:
 
 ```bash
-uv venv .venv --python 3.10
-uv pip install --python .venv/bin/python -r requirements.txt
+python3.10 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-Apple Silicon training uses PyTorch MPS when the script is run from a normal
-Terminal window. Codex sandboxed commands may not expose the Metal device even
-when the machine supports MPS.
+The listed dependencies cover data extraction (`duckdb`), audio I/O and resampling (`soundfile`, `soxr`), features and baselines (`numpy`, `scikit-learn`), neural models (`torch`, `transformers`), plots (`matplotlib`), and the local app (`fastapi`, `python-multipart`, `uvicorn`). PyTorch device support depends on the platform and installation.
 
-## Data Pipeline
+## Reproduce the pipeline
 
-Run metadata acquisition and preprocessing:
+These commands download data and train models; allow for substantial disk space and compute. This checkout already contains generated metadata and metrics, so the commands use `--overwrite` to regenerate them. Copy those artifacts elsewhere first if you need to keep the saved results.
 
 ```bash
+# Prepare the balanced local subset and fixed-length audio.
 scripts/data.sh --overwrite
+
+# Train MFCC baselines, lightweight CNN, and Phase 6 PhoWhisper models;
+# then write the Phase 7 comparison/error analysis.
+scripts/train.sh --device auto --overwrite
+
+# Train E6 Whisper-base separately.
+.venv/bin/python -m src.training.train_e6_whisper --device auto --overwrite
+
+# Train E1/E2/E3/E5 and reuse existing E4/E6 results in the comparison.
+.venv/bin/python -m src.training.train_extended_deep_learning --device auto --full --allow-download --overwrite
 ```
 
-Useful options:
-
-```bash
-scripts/data.sh \
-  --max-data-bytes 10000000000 \
-  --train-per-label 4000 \
-  --valid-per-label 500 \
-  --test-per-label 500 \
-  --seed 42 \
-  --overwrite
-```
-
-Metadata-only mode:
-
-```bash
-scripts/data.sh --metadata-only
-```
-
-Run preprocessing directly:
-
-```bash
-.venv/bin/python -m src.data.preprocess_audio --overwrite
-```
-
-## Training Commands
-
-Run the core MVP training pipeline:
-
-```bash
-scripts/train.sh --device mps --overwrite
-```
-
-Run E3 and E5 on Apple MPS:
-
-```bash
-scripts/train_e3_e5_mps.sh --overwrite
-```
-
-Run E6 original Whisper-base on Apple MPS:
-
-```bash
-scripts/train_e6_whisper_mps.sh --overwrite
-```
-
-Run Phase 10 E7 hybrid PhoWhisper + CNN fusion on Apple MPS:
+On Apple Silicon, the provided runners reproduce the later experiments on MPS:
 
 ```bash
 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite
-```
-
-Run Phase 11 E8 residual-gated PhoWhisper + CNN fusion on Apple MPS:
-
-```bash
 scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite
 ```
 
-Add `--allow-download` only if `vinai/PhoWhisper-base` is not already cached
-under `outputs/models/hf_cache/`.
+E7 requires the trained E2 checkpoint. E8 also uses the Phase 6 PhoWhisper head checkpoint by default. The E7/E8 runners use a local Hugging Face cache at `outputs/models/hf_cache/`; add `--allow-download` if PhoWhisper is not cached. E3 uses `--allow-download` in the extended runner above for its pretrained encoder. Experiment parameters are recorded in [`configs/experiments/`](configs/experiments/) and the runner scripts. For more options, run `scripts/data.sh --help` or `scripts/train.sh --help`.
 
-Smoke-test the heavier scripts on a tiny subset:
+## Run the web app
 
-```bash
-scripts/train_e3_e5_mps.sh --overwrite --smoke
-scripts/train_e6_whisper_mps.sh --overwrite --smoke
-scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --smoke
-scripts/train_e8_whisper_cnn_residual_fusion_mps.sh --overwrite --smoke
-```
-
-## Current Model Results
-
-The trained rows below are generated from the current local artifacts under
-`outputs/metrics/`. E7/E8 are listed as pending research runs until their
-artifacts are generated. Model selection should use validation macro F1; test
-metrics are reported for final comparison only.
-
-| Model | Input | Status | Device | Valid Acc | Valid Macro F1 | Test Acc | Test Macro F1 | Size MB | Latency ms/sample |
-| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Logistic Regression | MFCC mean/std | trained | CPU | 0.5617 | 0.5612 | 0.5466 | 0.5463 | 0.002 | N/A |
-| SVM | MFCC mean/std | trained | CPU | 0.5686 | 0.5688 | 0.5590 | 0.5592 | 1.783 | N/A |
-| Lightweight CNN | Log-Mel | trained | MPS | 0.6091 | 0.6052 | 0.6187 | 0.6115 | 0.099 | N/A |
-| E1 MobileNetV3-style | Log-Mel | trained | MPS | 0.6783 | 0.6719 | 0.6996 | 0.6941 | 0.202 | 152.69 |
-| E2 EfficientNet-B0-style | Log-Mel | trained | MPS | 0.7188 | 0.7127 | 0.7003 | 0.6932 | 0.515 | 85.93 |
-| E3 wav2vec2 Vietnamese | Waveform | trained | MPS | 0.6337 | 0.6063 | 0.6180 | 0.5809 | 1441.515 | 216.61 |
-| E4 PhoWhisper-base frozen encoder | Whisper features | reused | MPS | 0.8477 | 0.8474 | 0.8368 | 0.8348 | 79.085 | 79.08 |
-| E5 ChunkFormer-style local model | Waveform | trained | MPS | 0.6372 | 0.6286 | 0.6427 | 0.6330 | 1.634 | 27.55 |
-| E6 Whisper-base original frozen encoder | Whisper features | trained | MPS | 0.8244 | 0.8229 | 0.8189 | 0.8163 | 79.084 | 86.29 |
-| E7 PhoWhisper + CNN fusion | PhoWhisper features + Log-Mel | pending full run | MPS/CUDA/CPU | N/A | N/A | N/A | N/A | N/A | N/A |
-| E8 Residual-gated PhoWhisper + CNN fusion | PhoWhisper features + Log-Mel | pending full run | MPS/CUDA/CPU | N/A | N/A | N/A | N/A | N/A | N/A |
-
-Current best model by validation macro F1 is E4 PhoWhisper-base frozen encoder
-with validation macro F1 `0.8474` and test macro F1 `0.8348`.
-
-Important notes:
-
-- E1 and E2 are PyTorch-only MobileNet/EfficientNet-inspired classifiers; they
-  do not use `torchvision` pretrained ImageNet weights.
-- E3 uses frozen Vietnamese wav2vec2 embeddings plus a classifier head.
-- E4 reuses the Phase 6 PhoWhisper-base frozen-encoder run.
-- E5 is a local ChunkFormer-style waveform model, not an official ViP-VL or
-  ChunkFormer pretrained checkpoint.
-- E6 uses original `openai/whisper-base` with the same frozen-encoder
-  comparison setup as PhoWhisper-base.
-- E7 freezes the PhoWhisper encoder and reuses the trained E2
-  EfficientNetB0-style log-Mel features branch. It trains the projection/fusion
-  layers, the 3-class classifier head, and by default lightly fine-tunes the
-  last two local CNN feature blocks. It does not use the decoder or ASR
-  transcripts.
-- E8 keeps the PhoWhisper encoder frozen, lightly fine-tunes the last two
-  EfficientNetB0-style local CNN blocks, and uses residual-gated fusion
-  `z = g + beta * r(g,l) * P(l)`. Its classifier uses the PhoWhisper baseline
-  projector/classifier warm-start when
-  `outputs/models/phowhisper_pretrained_frozen_encoder.pt` is available.
-- PhoWhisper full fine-tuning exists as a smaller older run
-  (`outputs/metrics/phowhisper_results.json`): validation macro F1 `0.6623`,
-  test macro F1 `0.7113`, using 300/45/45 train/valid/test rows.
-
-## Phase 10 Hybrid PhoWhisper + CNN Fusion
-
-Phase 10 adds `e7_whisper_cnn_fusion`, a local-global research experiment for
-Vietnamese dialect classification. The global branch uses a frozen
-`vinai/PhoWhisper-base` encoder, currently the strongest baseline in this repo,
-and mean-pools encoder hidden states into an utterance-level embedding. The
-local branch converts the same 16 kHz / 16 s waveform into a standardized
-log-Mel spectrogram and passes it through the trained E2 EfficientNetB0-style
-features branch to reuse local time-frequency dialect cues. By default, E7
-lightly fine-tunes the last two parameterized EfficientNetB0 feature blocks with
-a smaller CNN learning rate while keeping PhoWhisper frozen. PhoWhisper global
-embeddings stay at 512 dimensions. EfficientNetB0 features produce a
-128-dimensional local vector, which is projected to 512 dimensions before gated
-fusion. The classification head is `512 -> 256 -> 3`.
-
-The default fusion is gated. A concat fusion ablation can be run with:
-
-```bash
-scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite --concat
-```
-
-The original frozen-CNN ablation can still be run with:
-
-```bash
-CNN_TRAINABLE_LAYERS=0 scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite
-```
-
-The E7 report focuses on validation/test macro F1 plus Central recall, Central
-F1, and Central-to-Northern / Central-to-Southern confusion. Interpret E7
-against E1/MobileNetV3-style, the Phase 5 CNN, E3 wav2vec2, E4 PhoWhisper, and
-E6 Whisper-base. If Central recall/F1 improves over frozen PhoWhisper-base, the
-local EfficientNetB0-style branch likely contributes complementary dialect cues.
-If it does not, the extra fusion path may add complexity and latency without
-useful gain.
-
-E7 predicts only the dataset-defined `Northern`, `Central`, and `Southern`
-labels. It does not infer hometown, identity, ethnicity, or personal background.
-
-## Phase 11 Residual-Gated PhoWhisper + CNN Fusion
-
-Phase 11 adds `e8_whisper_cnn_residual_fusion`, a residual version of the
-PhoWhisper-CNN hybrid. The global branch is the frozen `vinai/PhoWhisper-base`
-encoder with mean-pooled 512-dimensional hidden states. The local branch is the
-trained E2 EfficientNetB0-style log-Mel feature extractor, with the last two
-parameterized feature blocks fine-tuned at `1e-5`.
-
-The default E8 fusion keeps PhoWhisper as the primary representation:
-
-```text
-g = MeanPool(PhoWhisperEncoder(audio))
-l = EfficientNetB0Features(LogMel(audio))
-P(l) = LayerNorm(128) -> Linear(128, 512)
-r = sigmoid(Linear([g; P(l)] -> 512))
-z = g + beta * r * P(l)
-logits = PhoWhisperProjector(512 -> 256) -> PhoWhisperClassifier(256 -> 3)
-```
-
-`beta` is a learnable scalar initialized to `0.1`, and the batch size default is
-`14`. E8 writes separate artifacts under `e8_whisper_cnn_residual_fusion*`, so
-previous E7 outputs are preserved. Legacy `--gated` and `--concat` ablations
-remain available from the E8 runner.
-
-Comparison artifacts:
-
-- `outputs/metrics/model_method_comparison.csv`
-- `outputs/figures/model_method_comparison_metrics.png`
-- `outputs/figures/model_method_comparison_tradeoffs.png`
-- `outputs/metrics/deep_learning_comparison.csv`
-- `outputs/figures/deep_learning_comparison.png`
-- `outputs/reports/extended_deep_learning_experiments.md`
-
-## Model Artifacts
-
-Important checkpoints are written under `outputs/models/`:
-
-- `logistic_regression_mfcc.pkl`
-- `svm_mfcc.pkl`
-- `lightweight_cnn_logmel.pt`
-- `e1_mobilenetv3_logmel.pt`
-- `e2_efficientnetb0_logmel.pt`
-- `e3_wav2vec2_classifier.pt`
-- `phowhisper_pretrained_frozen_encoder.pt`
-- `e5_vipvl_chunkformer_classifier.pt`
-- `e6_whisper_base_frozen_encoder.pt`
-- `e7_whisper_cnn_fusion.pt`
-- `e8_whisper_cnn_residual_fusion.pt`
-
-The Hugging Face cache is under `outputs/models/hf_cache/`.
-
-## App And Inference
-
-Run the FastAPI app:
+After the required checkpoints and cache exist:
 
 ```bash
 .venv/bin/python -m uvicorn src.app.main:app --reload
 ```
 
-Open:
+Open <http://127.0.0.1:8000/> and upload an audio file. The interface offers `cnn`, `svm`, and `phowhisper` when their local artifacts are available. The default selection is CNN. Set `DEFAULT_MODEL=phowhisper` before starting the server to select the strongest saved research model by default; this still requires its checkpoint and cached encoder. Other overrides are `CNN_CHECKPOINT_PATH`, `SVM_MODEL_PATH`, `PHOWHISPER_CHECKPOINT_PATH`, `PHOWHISPER_CACHE_DIR`, `CNN_DEVICE`, and `PHOWHISPER_DEVICE`.
 
-```text
-http://127.0.0.1:8000/
-```
-
-Available API endpoints:
-
-- `GET /models`
-- `GET /health`
-- `POST /predict` with multipart form fields `file` and `model`
-
-Supported app model names are:
-
-- `cnn`
-- `svm`
-- `phowhisper`
-
-Override app artifacts and devices:
+API endpoints: `GET /health`, `GET /models`, and `POST /predict` with multipart fields `file` and `model`. Example:
 
 ```bash
-DEFAULT_MODEL=cnn \
-CNN_CHECKPOINT_PATH=outputs/models/lightweight_cnn_logmel.pt \
-SVM_MODEL_PATH=outputs/models/svm_mfcc.pkl \
-PHOWHISPER_CHECKPOINT_PATH=outputs/models/phowhisper_pretrained_frozen_encoder.pt \
-PHOWHISPER_CACHE_DIR=outputs/models/hf_cache \
-CNN_DEVICE=auto \
-PHOWHISPER_DEVICE=auto \
-.venv/bin/python -m uvicorn src.app.main:app --reload
+curl -F "file=@sample.wav" -F "model=phowhisper" http://127.0.0.1:8000/predict
 ```
 
-The app predicts only the three regional labels. It does not infer identity,
-hometown, ethnicity, or personal background. Confidence values are uncalibrated:
-CNN/PhoWhisper use softmax scores, and SVM uses a decision-margin display score.
+The score shown by the app is uncalibrated. The system does not identify a speaker, hometown, ethnicity, or other personal background.
 
-## Verification
-
-Focused tests:
-
-```bash
-.venv/bin/python -m unittest tests.test_whisper_cnn_fusion -v
-.venv/bin/python -m unittest tests.test_phowhisper tests.test_extended_deep_learning -v
-.venv/bin/python -m unittest tests.test_inference tests.test_app -v
-```
-
-Full test suite:
+## Verify and explore
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -p 'test_*.py' -v
-```
-
-Compile check:
-
-```bash
 .venv/bin/python -m compileall -q src tests
 ```
 
-## Dependencies
-
-Core dependencies are intentionally small:
-
-- `numpy` for feature and waveform arrays.
-- `soundfile` for audio loading/writing.
-- `soxr` for 16 kHz resampling.
-- `duckdb` for ViMD Parquet metadata/audio extraction.
-- `scikit-learn` for MFCC baselines and metrics.
-- `torch` for neural training.
-- `transformers` for wav2vec2, PhoWhisper, and Whisper-base checkpoints.
-- `fastapi` and `uvicorn` for the local web app.
+Code lives in [`src/`](src/), shell runners in [`scripts/`](scripts/), tests in [`tests/`](tests/), saved figures and metrics in [`outputs/`](outputs/), and research notes in [`docs/`](docs/) and [`outputs/reports/`](outputs/reports/). The figure is an editable, standalone SVG styled with guidance from the locally cloned [figures4papers](https://github.com/ChenLiu-1996/figures4papers) reference; that clone is not required to view it.

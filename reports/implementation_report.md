@@ -1,5 +1,73 @@
 # Implementation Report
 
+## Latest Update: Final README and system architecture
+
+### Task Summary
+
+Reviewed the completed pipeline against saved metrics and app code, removed the root agent guide, rewrote the README for Phase 12, and added a standalone system architecture figure.
+
+### Files Changed
+
+| File | Purpose |
+| --- | --- |
+| `AGENTS.md` | Removed per request. |
+| `README.md` | Documents actual results, setup, reproduction, app scope, and limitations. |
+| `outputs/figures/system_architecture.svg` | Vector diagram of offline research and local inference. |
+| `.gitignore` | Excludes the user's local `figures4papers/` reference clone. |
+| `reports/implementation_report.md` | Records this review and verification. |
+
+### Scope And Decisions
+
+- Used `outputs/metrics/model_method_comparison.csv` as the current comparison source. The older `final_comparison.csv` contains a smaller Phase 7 run and is identified as such in the README.
+- E4 remains best by saved validation macro F1 (`0.8474`); E7/E8 are complete research runs (`0.8194`/`0.8395`) and are not selectable in the app.
+- The app exposes only SVM, lightweight CNN, and PhoWhisper. The figure uses the locally cloned figures4papers style reference but is committed as a self-contained SVG.
+- Dataset counts were checked against saved Phase 1/2 summaries and CSV examples. The selected subset has one speaker ID in both validation and test.
+
+### Commands Run
+
+```bash
+python -m compileall -q src tests
+bash -n scripts/*.sh
+git diff --check
+python - <<'PY_CHECK'
+from pathlib import Path
+from xml.etree import ElementTree as ET
+import csv, re
+readme = Path('README.md').read_text()
+rows = {r['method_id']: r for r in csv.DictReader(Path('outputs/metrics/model_method_comparison.csv').open())}
+for model in ('e4_phowhisper', 'e7_whisper_cnn_fusion', 'e8_whisper_cnn_residual_fusion'):
+    for key in ('valid_macro_f1', 'test_macro_f1'):
+        assert f"{float(rows[model][key]):.4f}" in readme
+for target in re.findall(r'\]\(([^)]+)\)', readme):
+    if '://' not in target and not target.startswith('mailto:'):
+        assert Path(target).exists(), target
+assert ET.parse('outputs/figures/system_architecture.svg').getroot().attrib['viewBox'] == '0 0 1500 900'
+assert readme.count('```') % 2 == 0
+PY_CHECK
+```
+
+### Outputs And Verification
+
+| Check | Result |
+| --- | --- |
+| Source and shell syntax | Passed: Python compilation and shell syntax checks. |
+| README metrics and links | Passed: E4/E7/E8 values match the saved comparison; local links exist. |
+| Figure format | Passed: SVG parses as XML with a `1500 × 900` viewBox. |
+| Agent guide cleanup | Passed: root `AGENTS.md` removed; local reference clone ignored. |
+
+### Known Limitations
+
+- This checkout has no `.venv`, generated audio, checkpoints, or Hugging Face cache. Full tests, training, and live app prediction were not run here; system Python also lacks PyTorch and Matplotlib.
+- A headless Firefox screenshot of the SVG was attempted but did not produce an image, so visual rendering was not independently inspected in this environment.
+- The saved split contains one validation/test speaker overlap; evaluation is not fully speaker-disjoint.
+
+### Reviewer Priorities
+
+1. Inspect the SVG in a browser or design viewer for presentation use.
+2. Re-run the full test suite and app with the project environment and checkpoints available.
+
+---
+
 ## Latest Update: Central Class Data Analysis Doc
 
 ### Task Summary

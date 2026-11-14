@@ -4,31 +4,31 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/train_e3_e5_mps.sh --overwrite [--smoke] [--skip-e3] [--skip-e5] [--no-download]
+Usage: scripts/train_wav2vec2_chunkformer_mps.sh --overwrite [--smoke] [--skip-wav2vec2] [--skip-chunkformer] [--no-download]
 
-Train Phase 9 E3 and E5 outside the Codex sandbox with Apple MPS:
-  E3: frozen Vietnamese wav2vec2 encoder + trainable classifier head.
-  E5: local ChunkFormer-style waveform classifier.
+Train Phase 9 wav2vec2 and ChunkFormer outside the Codex sandbox with Apple MPS:
+  wav2vec2: frozen Vietnamese wav2vec2 encoder + trainable classifier head.
+  ChunkFormer: local ChunkFormer-style waveform classifier.
 
 Run from a normal Terminal window so PyTorch can see the Apple Metal device.
 
 Options:
-  --overwrite    Regenerate existing E3/E5 checkpoints, metrics, and figures.
+  --overwrite    Regenerate existing wav2vec2/ChunkFormer checkpoints, metrics, and figures.
   --smoke        Use a tiny balanced subset and one epoch for a quick check.
-  --skip-e3      Do not run E3 wav2vec2.
-  --skip-e5      Do not run E5 ChunkFormer-style classifier.
-  --no-download  Require the E3 wav2vec2 checkpoint to already be cached.
+  --skip-wav2vec2  Skip the wav2vec2 classifier.
+  --skip-chunkformer  Skip the ChunkFormer classifier.
+  --no-download  Require the wav2vec2 checkpoint to already be cached.
   -h, --help     Show this help message.
 
 Environment overrides:
   PYTHON_BIN        default: .venv/bin/python
   DEVICE            default: mps
   BATCH_SIZE        default: 4
-  E3_MAX_EPOCHS     default: 20
-  E5_MAX_EPOCHS     default: 20
+  WAV2VEC2_MAX_EPOCHS     default: 20
+  CHUNKFORMER_MAX_EPOCHS     default: 20
   PATIENCE          default: 5
-  E3_LR_HEAD        default: 1e-3
-  E5_LR             default: 1e-4
+  WAV2VEC2_LR_HEAD        default: 1e-3
+  CHUNKFORMER_LR             default: 1e-4
   WEIGHT_DECAY      default: 1e-4
   LATENCY_SAMPLES   default: 5
 EOF
@@ -36,8 +36,8 @@ EOF
 
 OVERWRITE=0
 ALLOW_DOWNLOAD=1
-RUN_E3=1
-RUN_E5=1
+RUN_WAV2VEC2=1
+RUN_CHUNKFORMER=1
 SMOKE=0
 
 while (($# > 0)); do
@@ -50,12 +50,12 @@ while (($# > 0)); do
       SMOKE=1
       shift
       ;;
-    --skip-e3)
-      RUN_E3=0
+    --skip-wav2vec2)
+      RUN_WAV2VEC2=0
       shift
       ;;
-    --skip-e5)
-      RUN_E5=0
+    --skip-chunkformer)
+      RUN_CHUNKFORMER=0
       shift
       ;;
     --no-download)
@@ -75,8 +75,8 @@ while (($# > 0)); do
 done
 
 if [[ "${OVERWRITE}" != "1" ]]; then
-  echo "Refusing to overwrite existing E3/E5 artifacts without --overwrite." >&2
-  echo "Run: scripts/train_e3_e5_mps.sh --overwrite" >&2
+  echo "Refusing to overwrite existing wav2vec2/ChunkFormer artifacts without --overwrite." >&2
+  echo "Run: scripts/train_wav2vec2_chunkformer_mps.sh --overwrite" >&2
   exit 2
 fi
 
@@ -85,11 +85,11 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
 DEVICE="${DEVICE:-mps}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
-E3_MAX_EPOCHS="${E3_MAX_EPOCHS:-20}"
-E5_MAX_EPOCHS="${E5_MAX_EPOCHS:-20}"
+WAV2VEC2_MAX_EPOCHS="${WAV2VEC2_MAX_EPOCHS:-20}"
+CHUNKFORMER_MAX_EPOCHS="${CHUNKFORMER_MAX_EPOCHS:-20}"
 PATIENCE="${PATIENCE:-5}"
-E3_LR_HEAD="${E3_LR_HEAD:-1e-3}"
-E5_LR="${E5_LR:-1e-4}"
+WAV2VEC2_LR_HEAD="${WAV2VEC2_LR_HEAD:-1e-3}"
+CHUNKFORMER_LR="${CHUNKFORMER_LR:-1e-4}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
 
@@ -107,8 +107,8 @@ if [[ ! -f data/processed/preprocessed_metadata.csv ]]; then
 fi
 
 if [[ "${SMOKE}" == "1" ]]; then
-  E3_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
-  E5_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
+  WAV2VEC2_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
+  CHUNKFORMER_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
 fi
 
 export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
@@ -140,8 +140,8 @@ echo
 echo "Run settings:"
 echo "  device=${DEVICE}"
 echo "  batch_size=${BATCH_SIZE}"
-echo "  e3_max_epochs=${E3_MAX_EPOCHS}"
-echo "  e5_max_epochs=${E5_MAX_EPOCHS}"
+echo "  wav2vec2_max_epochs=${WAV2VEC2_MAX_EPOCHS}"
+echo "  chunkformer_max_epochs=${CHUNKFORMER_MAX_EPOCHS}"
 echo "  patience=${PATIENCE}"
 echo "  pytorch_mps_fallback=${PYTORCH_ENABLE_MPS_FALLBACK}"
 if [[ "${SMOKE}" == "1" ]]; then
@@ -188,59 +188,59 @@ os._exit(exit_code)
 PY
 }
 
-if [[ "${RUN_E3}" == "1" ]]; then
-  E3_CMD=(
-    run_python_module src.training.train_e3_wav2vec2
+if [[ "${RUN_WAV2VEC2}" == "1" ]]; then
+  WAV2VEC2_CMD=(
+    run_python_module src.training.train_wav2vec2
     --full
   )
   if [[ "${SMOKE}" == "1" ]]; then
-    E3_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
+    WAV2VEC2_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
   fi
-  E3_CMD+=(
+  WAV2VEC2_CMD+=(
     --batch-size "${BATCH_SIZE}"
-    --max-epochs "${E3_MAX_EPOCHS}"
+    --max-epochs "${WAV2VEC2_MAX_EPOCHS}"
     --patience "${PATIENCE}"
     --device "${DEVICE}"
-    --learning-rate-head "${E3_LR_HEAD}"
+    --learning-rate-head "${WAV2VEC2_LR_HEAD}"
     --weight-decay "${WEIGHT_DECAY}"
     --latency-samples "${LATENCY_SAMPLES}"
   )
   if [[ "${ALLOW_DOWNLOAD}" == "1" ]]; then
-    E3_CMD+=(--allow-download)
+    WAV2VEC2_CMD+=(--allow-download)
   fi
-  E3_CMD+=(--overwrite)
+  WAV2VEC2_CMD+=(--overwrite)
   run_step \
-    "E3: wav2vec2 Vietnamese frozen encoder + classifier head" \
-    "${E3_CMD[@]}"
+    "wav2vec2: wav2vec2 Vietnamese frozen encoder + classifier head" \
+    "${WAV2VEC2_CMD[@]}"
 fi
 
-if [[ "${RUN_E5}" == "1" ]]; then
-  E5_CMD=(
-    run_python_module src.training.train_e5_vipvl_chunkformer
+if [[ "${RUN_CHUNKFORMER}" == "1" ]]; then
+  CHUNKFORMER_CMD=(
+    run_python_module src.training.train_vipvl_chunkformer
     --full
   )
   if [[ "${SMOKE}" == "1" ]]; then
-    E5_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
+    CHUNKFORMER_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
   fi
-  E5_CMD+=(
+  CHUNKFORMER_CMD+=(
     --batch-size "${BATCH_SIZE}"
-    --max-epochs "${E5_MAX_EPOCHS}"
+    --max-epochs "${CHUNKFORMER_MAX_EPOCHS}"
     --patience "${PATIENCE}"
     --device "${DEVICE}"
-    --learning-rate "${E5_LR}"
+    --learning-rate "${CHUNKFORMER_LR}"
     --weight-decay "${WEIGHT_DECAY}"
     --latency-samples "${LATENCY_SAMPLES}"
     --overwrite
   )
   run_step \
-    "E5: local ChunkFormer-style waveform classifier" \
-    "${E5_CMD[@]}"
+    "ChunkFormer: local ChunkFormer-style waveform classifier" \
+    "${CHUNKFORMER_CMD[@]}"
 fi
 
 echo
 echo "Done. Key outputs:"
-echo "  outputs/metrics/e3_wav2vec2_results.json"
-echo "  outputs/metrics/e5_vipvl_chunkformer_results.json"
+echo "  outputs/metrics/wav2vec2_results.json"
+echo "  outputs/metrics/vipvl_chunkformer_results.json"
 echo "  outputs/metrics/deep_learning_comparison.csv"
 echo "  outputs/metrics/model_method_comparison.csv"
 echo "  outputs/figures/model_method_comparison_metrics.png"

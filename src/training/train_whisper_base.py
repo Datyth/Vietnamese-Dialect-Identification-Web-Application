@@ -1,4 +1,4 @@
-"""Phase 9 E6 original Whisper-base experiment entrypoint."""
+"""Phase 9 Whisper-base original Whisper-base experiment entrypoint."""
 
 from __future__ import annotations
 
@@ -15,27 +15,27 @@ from src.training.train_extended_deep_learning import (
 )
 
 
-E6_DEFAULT_ARGS = (
+WHISPER_BASE_DEFAULT_ARGS = (
     "--model-id",
     "openai/whisper-base",
     "--training-mode",
     "frozen_encoder",
     "--checkpoint-path",
-    "outputs/models/e6_whisper_base_frozen_encoder.pt",
+    "outputs/models/whisper_base_frozen_encoder.pt",
     "--metrics-path",
-    "outputs/metrics/e6_whisper_base_results.json",
+    "outputs/metrics/whisper_base_results.json",
     "--training-log-path",
-    "outputs/metrics/e6_whisper_base_training_log.csv",
+    "outputs/metrics/whisper_base_training_log.csv",
     "--predictions-path",
-    "outputs/metrics/e6_whisper_base_test_predictions.csv",
+    "outputs/metrics/whisper_base_test_predictions.csv",
     "--report-path",
-    "outputs/reports/e6_whisper_base_report.md",
+    "outputs/reports/whisper_base_report.md",
     "--valid-confusion-path",
-    "outputs/metrics/e6_whisper_base_valid_confusion_matrix.csv",
+    "outputs/metrics/whisper_base_valid_confusion_matrix.csv",
     "--test-confusion-path",
-    "outputs/metrics/e6_whisper_base_test_confusion_matrix.csv",
+    "outputs/metrics/whisper_base_test_confusion_matrix.csv",
     "--experiment-id",
-    "e6_whisper_base",
+    "whisper_base",
     "--experiment-model-name",
     "Whisper-base original encoder + classifier",
     "--experiment-notes",
@@ -44,15 +44,15 @@ E6_DEFAULT_ARGS = (
 
 
 def main() -> None:
-    sys.argv = [sys.argv[0], *E6_DEFAULT_ARGS, *sys.argv[1:]]
+    sys.argv = [sys.argv[0], *WHISPER_BASE_DEFAULT_ARGS, *sys.argv[1:]]
     train_phowhisper.main()
-    write_e6_confusion_figure()
+    write_whisper_base_confusion_figure()
     write_phase9_summary_from_available()
     write_method_comparison_from_available()
 
 
-def write_e6_confusion_figure() -> None:
-    spec = EXPERIMENTS["e6_whisper_base"]
+def write_whisper_base_confusion_figure() -> None:
+    spec = EXPERIMENTS["whisper_base"]
     result = read_json_or_none(spec.metric_path)
     if result is None:
         return
@@ -64,7 +64,7 @@ def write_e6_confusion_figure() -> None:
     write_confusion_matrix_figure(
         spec.confusion_figure_path,
         matrix,
-        "e6_whisper_base test confusion matrix",
+        "whisper_base test confusion matrix",
     )
 
 

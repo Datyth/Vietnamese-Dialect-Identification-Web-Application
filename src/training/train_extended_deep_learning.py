@@ -1,8 +1,8 @@
 """Phase 9 extended deep-learning experiment runner.
 
-The default is a smoke run: E1/E2 train on a tiny balanced subset for one epoch,
-E4 reuses existing Phase 6 PhoWhisper results, and dependency-heavy E3/E5 write
-honest skipped/setup artifacts without blocking the demo.
+The default is a smoke run: MobileNetV3 and EfficientNet-B0 train on a tiny
+balanced subset for one epoch, PhoWhisper reuses existing Phase 6 results, and
+dependency-heavy wav2vec2 and ChunkFormer write skipped/setup artifacts.
 """
 
 from __future__ import annotations
@@ -42,10 +42,10 @@ LABEL_TO_INDEX = {label: index for index, label in enumerate(LABELS)}
 SPLITS = ("train", "valid", "test")
 PHASE = "phase9_extended_deep_learning_experiments"
 PHASE10 = "phase10_whisper_cnn_fusion"
-PHASE10_METRIC_PATH = Path("outputs/metrics/e7_whisper_cnn_fusion_results.json")
+PHASE10_METRIC_PATH = Path("outputs/metrics/whisper_cnn_fusion_results.json")
 PHASE11 = "phase11_whisper_cnn_residual_fusion"
 PHASE11_METRIC_PATH = Path(
-    "outputs/metrics/e8_whisper_cnn_residual_fusion_results.json"
+    "outputs/metrics/whisper_cnn_residual_fusion_results.json"
 )
 DEFAULT_SEED = 42
 DEFAULT_SMOKE_LIMIT_PER_SPLIT = 9
@@ -85,100 +85,100 @@ class ExperimentSpec:
 
 
 EXPERIMENTS: dict[str, ExperimentSpec] = {
-    "e1_mobilenetv3": ExperimentSpec(
-        experiment_id="e1_mobilenetv3",
-        aliases=("e1",),
+    "mobilenetv3": ExperimentSpec(
+        experiment_id="mobilenetv3",
+        aliases=(),
         model_name="MobileNetV3-Small-style log-Mel classifier",
         input_type="log_mel_spectrogram",
         pretrained="none",
         trainable_setting="all_parameters_trainable",
-        metric_path=Path("outputs/metrics/e1_mobilenetv3_results.json"),
+        metric_path=Path("outputs/metrics/mobilenetv3_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e1_mobilenetv3_confusion_matrix.png"
+            "outputs/figures/mobilenetv3_confusion_matrix.png"
         ),
-        checkpoint_path=Path("outputs/models/e1_mobilenetv3_logmel.pt"),
-        training_log_path=Path("outputs/metrics/e1_mobilenetv3_training_log.csv"),
+        checkpoint_path=Path("outputs/models/mobilenetv3_logmel.pt"),
+        training_log_path=Path("outputs/metrics/mobilenetv3_training_log.csv"),
         notes="PyTorch-only MobileNetV3-inspired scaffold; no torchvision dependency.",
     ),
-    "e2_efficientnetb0": ExperimentSpec(
-        experiment_id="e2_efficientnetb0",
-        aliases=("e2", "e2_efficientnet"),
+    "efficientnetb0": ExperimentSpec(
+        experiment_id="efficientnetb0",
+        aliases=(),
         model_name="EfficientNet-B0-style log-Mel classifier",
         input_type="log_mel_spectrogram",
         pretrained="none",
         trainable_setting="all_parameters_trainable",
-        metric_path=Path("outputs/metrics/e2_efficientnetb0_results.json"),
+        metric_path=Path("outputs/metrics/efficientnetb0_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e2_efficientnetb0_confusion_matrix.png"
+            "outputs/figures/efficientnetb0_confusion_matrix.png"
         ),
-        checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
-        training_log_path=Path("outputs/metrics/e2_efficientnetb0_training_log.csv"),
+        checkpoint_path=Path("outputs/models/efficientnetb0_logmel.pt"),
+        training_log_path=Path("outputs/metrics/efficientnetb0_training_log.csv"),
         notes="PyTorch-only EfficientNet-inspired scaffold; ImageNet weights deferred.",
     ),
-    "e3_wav2vec2": ExperimentSpec(
-        experiment_id="e3_wav2vec2",
-        aliases=("e3",),
+    "wav2vec2": ExperimentSpec(
+        experiment_id="wav2vec2",
+        aliases=(),
         model_name="wav2vec2 Vietnamese encoder + classifier",
         input_type="waveform_16khz",
         pretrained=DEFAULT_WAV2VEC2_MODEL_ID,
         trainable_setting="frozen_encoder_offline_embeddings_classifier_head",
-        metric_path=Path("outputs/metrics/e3_wav2vec2_results.json"),
+        metric_path=Path("outputs/metrics/wav2vec2_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e3_wav2vec2_confusion_matrix.png"
+            "outputs/figures/wav2vec2_confusion_matrix.png"
         ),
-        checkpoint_path=Path("outputs/models/e3_wav2vec2_classifier.pt"),
-        training_log_path=Path("outputs/metrics/e3_wav2vec2_training_log.csv"),
+        checkpoint_path=Path("outputs/models/wav2vec2_classifier.pt"),
+        training_log_path=Path("outputs/metrics/wav2vec2_training_log.csv"),
         notes=(
             "Frozen wav2vec2 Vietnamese encoder with a trainable classifier head; "
             "uses offline embedding extraction for lower memory."
         ),
     ),
-    "e4_phowhisper": ExperimentSpec(
-        experiment_id="e4_phowhisper",
-        aliases=("e4",),
+    "phowhisper_comparison": ExperimentSpec(
+        experiment_id="phowhisper_comparison",
+        aliases=(),
         model_name="PhoWhisper-base encoder + classifier",
         input_type="phowhisper_input_features",
         pretrained="vinai/PhoWhisper-base",
         trainable_setting="reused_phase6_frozen_encoder_by_default",
-        metric_path=Path("outputs/metrics/e4_phowhisper_results.json"),
+        metric_path=Path("outputs/metrics/phowhisper_comparison_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e4_phowhisper_confusion_matrix.png"
+            "outputs/figures/phowhisper_comparison_confusion_matrix.png"
         ),
         checkpoint_path=Path("outputs/models/phowhisper_pretrained_frozen_encoder.pt"),
         training_log_path=None,
         notes="Reuses existing Phase 6 PhoWhisper metrics/checkpoint by default.",
     ),
-    "e5_vipvl_chunkformer": ExperimentSpec(
-        experiment_id="e5_vipvl_chunkformer",
-        aliases=("e5",),
+    "vipvl_chunkformer": ExperimentSpec(
+        experiment_id="vipvl_chunkformer",
+        aliases=(),
         model_name="ViP-VL / ChunkFormer encoder + classifier",
         input_type="waveform_16khz",
         pretrained="not_configured",
         trainable_setting="planned_frozen_encoder_then_partial_finetune",
-        metric_path=Path("outputs/metrics/e5_vipvl_chunkformer_results.json"),
+        metric_path=Path("outputs/metrics/vipvl_chunkformer_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e5_vipvl_chunkformer_confusion_matrix.png"
+            "outputs/figures/vipvl_chunkformer_confusion_matrix.png"
         ),
-        checkpoint_path=Path("outputs/models/e5_vipvl_chunkformer_classifier.pt"),
-        training_log_path=Path("outputs/metrics/e5_vipvl_chunkformer_training_log.csv"),
+        checkpoint_path=Path("outputs/models/vipvl_chunkformer_classifier.pt"),
+        training_log_path=Path("outputs/metrics/vipvl_chunkformer_training_log.csv"),
         notes=(
             "Plain PyTorch ChunkFormer-style waveform classifier; official "
             "ViP-VL/ChunkFormer dependency integration is recorded as a limitation."
         ),
     ),
-    "e6_whisper_base": ExperimentSpec(
-        experiment_id="e6_whisper_base",
-        aliases=("e6", "e6_whisper"),
+    "whisper_base": ExperimentSpec(
+        experiment_id="whisper_base",
+        aliases=(),
         model_name="Whisper-base original encoder + classifier",
         input_type="whisper_input_features",
         pretrained="openai/whisper-base",
         trainable_setting="frozen_encoder",
-        metric_path=Path("outputs/metrics/e6_whisper_base_results.json"),
+        metric_path=Path("outputs/metrics/whisper_base_results.json"),
         confusion_figure_path=Path(
-            "outputs/figures/e6_whisper_base_confusion_matrix.png"
+            "outputs/figures/whisper_base_confusion_matrix.png"
         ),
-        checkpoint_path=Path("outputs/models/e6_whisper_base_frozen_encoder.pt"),
-        training_log_path=Path("outputs/metrics/e6_whisper_base_training_log.csv"),
+        checkpoint_path=Path("outputs/models/whisper_base_frozen_encoder.pt"),
+        training_log_path=Path("outputs/metrics/whisper_base_training_log.csv"),
         notes=(
             "Original OpenAI Whisper-base checkpoint with frozen encoder; "
             "same base-size family as PhoWhisper-base."
@@ -257,11 +257,11 @@ def selected_specs(experiment: str) -> list[ExperimentSpec]:
 
 
 def build_model(spec: ExperimentSpec) -> Any:
-    if spec.experiment_id == "e1_mobilenetv3":
+    if spec.experiment_id == "mobilenetv3":
         from src.models.mobilenetv3_classifier import MobileNetV3SmallClassifier
 
         return MobileNetV3SmallClassifier(num_classes=len(LABELS))
-    if spec.experiment_id == "e2_efficientnetb0":
+    if spec.experiment_id == "efficientnetb0":
         from src.models.efficientnet_classifier import EfficientNetB0Classifier
 
         return EfficientNetB0Classifier(num_classes=len(LABELS))
@@ -1105,7 +1105,7 @@ def load_wav2vec2_encoder(args: argparse.Namespace, device: Any) -> tuple[Any, A
         from transformers import AutoFeatureExtractor, AutoModel
     except ImportError as exc:
         raise RuntimeError(
-            "transformers is required for E3 wav2vec2 training. "
+            "transformers is required for wav2vec2 training. "
             "Install dependencies with: uv pip install --python .venv/bin/python "
             "-r requirements.txt"
         ) from exc
@@ -1165,7 +1165,7 @@ def extract_wav2vec2_embeddings(
         labels.extend(LABEL_TO_INDEX[row["label"]] for row in batch_rows)
         if batch_index == 1 or batch_index == total_batches or batch_index % 50 == 0:
             print(
-                f"e3_wav2vec2: extracting {split} "
+                f"wav2vec2: extracting {split} "
                 f"batch {batch_index}/{total_batches}",
                 flush=True,
             )
@@ -1298,7 +1298,7 @@ def synchronize_device(torch: Any, device: Any) -> None:
         torch.mps.synchronize()
 
 
-def e3_wav2vec2_result(
+def wav2vec2_result(
     spec: ExperimentSpec,
     args: argparse.Namespace,
     device: Any,
@@ -1328,7 +1328,7 @@ def e3_wav2vec2_result(
     return result
 
 
-def e4_phowhisper_reuse_result(
+def phowhisper_comparison_reuse_result(
     spec: ExperimentSpec,
     args: argparse.Namespace,
     device: Any,
@@ -1406,7 +1406,7 @@ def e4_phowhisper_reuse_result(
     return result
 
 
-def e5_skipped_result(
+def chunkformer_skipped_result(
     spec: ExperimentSpec,
     args: argparse.Namespace,
     device: Any,
@@ -1425,7 +1425,7 @@ def e5_skipped_result(
     return result
 
 
-def e6_whisper_reuse_result(
+def whisper_base_reuse_result(
     spec: ExperimentSpec,
     args: argparse.Namespace,
     device: Any,
@@ -1439,7 +1439,7 @@ def e6_whisper_reuse_result(
             device,
             full_counts,
             "skipped",
-            "E6 Whisper-base metrics are not available yet. Run src.training.train_e6_whisper first.",
+            "Whisper-base metrics are not available yet. Run src.training.train_whisper_base first.",
         )
         write_empty_confusion_figure(
             spec.confusion_figure_path,
@@ -1662,9 +1662,9 @@ def write_report(path: Path, rows: list[dict[str, Any]]) -> None:
     lines = [
         "# Phase 9 Extended Deep Learning Experiments",
         "",
-        "This report is generated by the Phase 9 runner. E1/E2 train on "
-        "log-Mel features, E3 trains a frozen Vietnamese wav2vec2 embedding "
-        "classifier, E4 reuses Phase 6 PhoWhisper results, and E5 trains the "
+        "This report is generated by the Phase 9 runner. MobileNetV3 and EfficientNet-B0 train on "
+        "log-Mel features, wav2vec2 trains a frozen Vietnamese encoder embedding "
+        "classifier, PhoWhisper reuses Phase 6 results, and ChunkFormer trains the "
         "local ChunkFormer-style waveform classifier.",
         "",
         "| Experiment | Status | Valid Accuracy | Valid Macro F1 | Latency (ms/sample) | Notes |",
@@ -1811,7 +1811,7 @@ def append_phase10_comparison_row(rows: list[dict[str, Any]], path: Path) -> Non
     metrics = result.get("metrics", {})
     rows.append(
         {
-            "method_id": result.get("experiment_id", "e7_whisper_cnn_fusion"),
+            "method_id": result.get("experiment_id", "whisper_cnn_fusion"),
             "group": result.get("phase", PHASE10),
             "input_type": result.get(
                 "input_type",
@@ -1989,11 +1989,11 @@ def output_paths_for(specs: list[ExperimentSpec], include_summary: bool) -> list
     for spec in specs:
         paths.extend([spec.metric_path, spec.confusion_figure_path])
         if spec.experiment_id in {
-            "e1_mobilenetv3",
-            "e2_efficientnetb0",
-            "e3_wav2vec2",
-            "e5_vipvl_chunkformer",
-            "e6_whisper_base",
+            "mobilenetv3",
+            "efficientnetb0",
+            "wav2vec2",
+            "vipvl_chunkformer",
+            "whisper_base",
         }:
             paths.append(spec.checkpoint_path)
         if spec.training_log_path is not None:
@@ -2106,7 +2106,7 @@ def parse_args(default_experiment: str = "all") -> argparse.Namespace:
     parser.add_argument(
         "--allow-download",
         action="store_true",
-        help="Allow Hugging Face downloads for pretrained E3 assets.",
+        help="Allow Hugging Face downloads for pretrained wav2vec2 assets.",
     )
     parser.add_argument(
         "--phowhisper-source-metrics-path",
@@ -2158,9 +2158,9 @@ def main(default_experiment: str = "all") -> None:
 
     results: list[dict[str, Any]] = []
     for spec in specs:
-        if spec.experiment_id in {"e1_mobilenetv3", "e2_efficientnetb0"}:
+        if spec.experiment_id in {"mobilenetv3", "efficientnetb0"}:
             result = train_logmel_experiment(spec, args, device, rows_by_split, full_counts)
-        elif spec.experiment_id == "e3_wav2vec2":
+        elif spec.experiment_id == "wav2vec2":
             result = train_wav2vec2_experiment(
                 spec,
                 args,
@@ -2168,9 +2168,9 @@ def main(default_experiment: str = "all") -> None:
                 rows_by_split,
                 full_counts,
             )
-        elif spec.experiment_id == "e4_phowhisper":
-            result = e4_phowhisper_reuse_result(spec, args, device, full_counts)
-        elif spec.experiment_id == "e5_vipvl_chunkformer":
+        elif spec.experiment_id == "phowhisper_comparison":
+            result = phowhisper_comparison_reuse_result(spec, args, device, full_counts)
+        elif spec.experiment_id == "vipvl_chunkformer":
             result = train_waveform_experiment(
                 spec,
                 args,
@@ -2178,8 +2178,8 @@ def main(default_experiment: str = "all") -> None:
                 rows_by_split,
                 full_counts,
             )
-        elif spec.experiment_id == "e6_whisper_base":
-            result = e6_whisper_reuse_result(spec, args, device, full_counts)
+        elif spec.experiment_id == "whisper_base":
+            result = whisper_base_reuse_result(spec, args, device, full_counts)
         else:
             raise ValueError(f"Unsupported experiment: {spec.experiment_id}")
         results.append(result)

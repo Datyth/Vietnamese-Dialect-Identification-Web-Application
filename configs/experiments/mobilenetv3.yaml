@@ -1,4 +1,4 @@
-experiment_name: e1_mobilenetv3_logmel
+experiment_name: mobilenetv3_logmel
 phase: phase9_extended_deep_learning_experiments
 mode: setup
 feature: log_mel_spectrogram

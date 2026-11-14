@@ -12,7 +12,7 @@ from src.training.train_phowhisper import (
     resolve_device,
     split_rows,
 )
-from src.training.train_e6_whisper import E6_DEFAULT_ARGS
+from src.training.train_whisper_base import WHISPER_BASE_DEFAULT_ARGS
 
 
 class PhoWhisperDeviceTests(unittest.TestCase):
@@ -119,12 +119,12 @@ class PhoWhisperTrainingModeTests(unittest.TestCase):
         )
         self.assertIn("frozen_encoder", resolved.checkpoint_path.name)
 
-    def test_e6_defaults_use_original_whisper_base_outputs(self):
-        defaults = list(E6_DEFAULT_ARGS)
+    def test_whisper_base_defaults_use_original_outputs(self):
+        defaults = list(WHISPER_BASE_DEFAULT_ARGS)
 
         self.assertIn("openai/whisper-base", defaults)
-        self.assertIn("e6_whisper_base", defaults)
-        self.assertIn("outputs/metrics/e6_whisper_base_results.json", defaults)
+        self.assertIn("whisper_base", defaults)
+        self.assertIn("outputs/metrics/whisper_base_results.json", defaults)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
-experiment_name: e4_phowhisper_base
+experiment_name: vipvl_chunkformer
 phase: phase9_extended_deep_learning_experiments
-mode: setup
-model_name: vinai/PhoWhisper-base
+mode: full
+model_name: vipvl_chunkformer_encoder
 sample_rate: 16000
 duration_sec: 16
 num_classes: 3
@@ -16,4 +16,5 @@ dropout: 0.3
 max_epochs: 20
 early_stopping_patience: 5
 metric_for_best_model: macro_f1
-notes: Phase 6 contains the real PhoWhisper run; Phase 9 setup keeps an embedding-head scaffold
+training_mode: local_chunkformer_style_waveform_classifier
+notes: trains the local plain-PyTorch ChunkFormer-style fallback with batch size 4; official ViP-VL/ChunkFormer checkpoint integration remains a limitation

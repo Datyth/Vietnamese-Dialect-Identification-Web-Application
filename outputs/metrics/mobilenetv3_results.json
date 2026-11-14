@@ -1,6 +1,6 @@
 {
   "phase": "phase9_extended_deep_learning_experiments",
-  "experiment_id": "e1_mobilenetv3",
+  "experiment_id": "mobilenetv3",
   "model_name": "MobileNetV3-Small-style log-Mel classifier",
   "input_type": "log_mel_spectrogram",
   "pretrained": "none",
@@ -69,12 +69,12 @@
     "learning_rate": 0.0001,
     "weight_decay": 0.0001,
     "training_time_minutes": 21.92146382916641,
-    "training_log_path": "outputs/metrics/e1_mobilenetv3_training_log.csv"
+    "training_log_path": "outputs/metrics/mobilenetv3_training_log.csv"
   },
   "best_epoch": 19,
   "best_valid_macro_f1": 0.6719282319642765,
-  "checkpoint_path": "outputs/models/e1_mobilenetv3_logmel.pt",
-  "confusion_matrix_path": "outputs/figures/e1_mobilenetv3_confusion_matrix.png",
+  "checkpoint_path": "outputs/models/mobilenetv3_logmel.pt",
+  "confusion_matrix_path": "outputs/figures/mobilenetv3_confusion_matrix.png",
   "model_size_mb": 0.20227336883544922,
   "latency_estimate": {
     "sample_count": 5,
@@ -161,7 +161,7 @@
         "Central": 0.6115702479338843,
         "Southern": 0.7462121212121212
       },
-      "confusion_matrix_path": "outputs/figures/e1_mobilenetv3_confusion_matrix.png"
+      "confusion_matrix_path": "outputs/figures/mobilenetv3_confusion_matrix.png"
     }
   },
   "notes": "PyTorch-only MobileNetV3-inspired scaffold; no torchvision dependency."

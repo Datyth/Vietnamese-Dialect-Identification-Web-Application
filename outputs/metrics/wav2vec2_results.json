@@ -1,6 +1,6 @@
 {
   "phase": "phase9_extended_deep_learning_experiments",
-  "experiment_id": "e3_wav2vec2",
+  "experiment_id": "wav2vec2",
   "model_name": "wav2vec2 Vietnamese encoder + classifier",
   "input_type": "waveform_16khz",
   "pretrained": "nguyenvulebinh/wav2vec2-base-vietnamese-250h",
@@ -68,14 +68,14 @@
     "learning_rate": 0.001,
     "weight_decay": 0.0001,
     "training_time_minutes": 37.12821713611665,
-    "training_log_path": "outputs/metrics/e3_wav2vec2_training_log.csv"
+    "training_log_path": "outputs/metrics/wav2vec2_training_log.csv"
   },
   "best_epoch": 4,
   "best_valid_macro_f1": 0.6063436257611304,
-  "checkpoint_path": "outputs/models/e3_wav2vec2_classifier.pt",
+  "checkpoint_path": "outputs/models/wav2vec2_classifier.pt",
   "encoder_cache_size_mb": 1441.4974460601807,
   "classifier_checkpoint_size_mb": 0.01756572723388672,
-  "confusion_matrix_path": "outputs/figures/e3_wav2vec2_confusion_matrix.png",
+  "confusion_matrix_path": "outputs/figures/wav2vec2_confusion_matrix.png",
   "model_size_mb": 1441.5150117874146,
   "latency_estimate": {
     "sample_count": 5,
@@ -162,7 +162,7 @@
         "Central": 0.3470319634703196,
         "Southern": 0.6841243862520459
       },
-      "confusion_matrix_path": "outputs/figures/e3_wav2vec2_confusion_matrix.png"
+      "confusion_matrix_path": "outputs/figures/wav2vec2_confusion_matrix.png"
     }
   },
   "notes": "Frozen wav2vec2 Vietnamese encoder with a trainable classifier head; uses offline embedding extraction for lower memory."

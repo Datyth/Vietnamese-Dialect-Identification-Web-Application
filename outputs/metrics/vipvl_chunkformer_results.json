@@ -1,6 +1,6 @@
 {
   "phase": "phase9_extended_deep_learning_experiments",
-  "experiment_id": "e5_vipvl_chunkformer",
+  "experiment_id": "vipvl_chunkformer",
   "model_name": "ViP-VL / ChunkFormer encoder + classifier",
   "input_type": "waveform_16khz",
   "pretrained": "not_configured",
@@ -66,12 +66,12 @@
     "learning_rate": 0.0001,
     "weight_decay": 0.0001,
     "training_time_minutes": 19.82190125208326,
-    "training_log_path": "outputs/metrics/e5_vipvl_chunkformer_training_log.csv"
+    "training_log_path": "outputs/metrics/vipvl_chunkformer_training_log.csv"
   },
   "best_epoch": 5,
   "best_valid_macro_f1": 0.6285591682760187,
-  "checkpoint_path": "outputs/models/e5_vipvl_chunkformer_classifier.pt",
-  "confusion_matrix_path": "outputs/figures/e5_vipvl_chunkformer_confusion_matrix.png",
+  "checkpoint_path": "outputs/models/vipvl_chunkformer_classifier.pt",
+  "confusion_matrix_path": "outputs/figures/vipvl_chunkformer_confusion_matrix.png",
   "model_size_mb": 1.6341447830200195,
   "latency_estimate": {
     "sample_count": 5,
@@ -158,7 +158,7 @@
         "Central": 0.559254327563249,
         "Southern": 0.6485943775100401
       },
-      "confusion_matrix_path": "outputs/figures/e5_vipvl_chunkformer_confusion_matrix.png"
+      "confusion_matrix_path": "outputs/figures/vipvl_chunkformer_confusion_matrix.png"
     }
   },
   "notes": "Plain PyTorch ChunkFormer-style waveform classifier; official ViP-VL/ChunkFormer dependency integration is recorded as a limitation."

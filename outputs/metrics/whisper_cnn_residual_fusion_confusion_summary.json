@@ -1,6 +1,6 @@
 {
-  "source_confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv",
-  "figure_path": "outputs/figures/e8_whisper_cnn_residual_fusion_confusion_matrix.png",
+  "source_confusion_matrix_path": "outputs/metrics/whisper_cnn_residual_fusion_test_confusion_matrix.csv",
+  "figure_path": "outputs/figures/whisper_cnn_residual_fusion_confusion_matrix.png",
   "labels": [
     "Northern",
     "Central",

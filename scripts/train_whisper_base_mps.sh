@@ -4,15 +4,15 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/train_e6_whisper_mps.sh --overwrite [--smoke]
+Usage: scripts/train_whisper_base_mps.sh --overwrite [--smoke]
 
-Train Phase 9 E6 outside the Codex sandbox with Apple MPS:
-  E6: original OpenAI Whisper-base frozen encoder + classifier head.
+Train Phase 9 Whisper-base outside the Codex sandbox with Apple MPS:
+  Whisper-base: original OpenAI Whisper-base frozen encoder + classifier head.
 
 Run from a normal Terminal window so PyTorch can see the Apple Metal device.
 
 Options:
-  --overwrite  Regenerate existing E6 checkpoint, metrics, report, and figures.
+  --overwrite  Regenerate existing Whisper-base checkpoint, metrics, report, and figures.
   --smoke      Use a tiny balanced subset and one epoch for a quick check.
   -h, --help   Show this help message.
 
@@ -20,9 +20,9 @@ Environment overrides:
   PYTHON_BIN       default: .venv/bin/python
   DEVICE           default: mps
   BATCH_SIZE       default: 4
-  E6_MAX_EPOCHS    default: 20
+  WHISPER_BASE_MAX_EPOCHS    default: 20
   PATIENCE         default: 5
-  E6_LR            default: 1e-4
+  WHISPER_BASE_LR            default: 1e-4
   WEIGHT_DECAY     default: 1e-4
   LATENCY_SAMPLES  default: 5
 EOF
@@ -54,8 +54,8 @@ while (($# > 0)); do
 done
 
 if [[ "${OVERWRITE}" != "1" ]]; then
-  echo "Refusing to overwrite existing E6 artifacts without --overwrite." >&2
-  echo "Run: scripts/train_e6_whisper_mps.sh --overwrite" >&2
+  echo "Refusing to overwrite existing Whisper-base artifacts without --overwrite." >&2
+  echo "Run: scripts/train_whisper_base_mps.sh --overwrite" >&2
   exit 2
 fi
 
@@ -64,9 +64,9 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
 DEVICE="${DEVICE:-mps}"
 BATCH_SIZE="${BATCH_SIZE:-4}"
-E6_MAX_EPOCHS="${E6_MAX_EPOCHS:-20}"
+WHISPER_BASE_MAX_EPOCHS="${WHISPER_BASE_MAX_EPOCHS:-20}"
 PATIENCE="${PATIENCE:-5}"
-E6_LR="${E6_LR:-1e-4}"
+WHISPER_BASE_LR="${WHISPER_BASE_LR:-1e-4}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
 
@@ -84,7 +84,7 @@ if [[ ! -f data/processed/preprocessed_metadata.csv ]]; then
 fi
 
 if [[ "${SMOKE}" == "1" ]]; then
-  E6_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
+  WHISPER_BASE_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
 fi
 
 export PYTORCH_ENABLE_MPS_FALLBACK="${PYTORCH_ENABLE_MPS_FALLBACK:-1}"
@@ -115,7 +115,7 @@ echo
 echo "Run settings:"
 echo "  device=${DEVICE}"
 echo "  batch_size=${BATCH_SIZE}"
-echo "  e6_max_epochs=${E6_MAX_EPOCHS}"
+echo "  whisper_base_max_epochs=${WHISPER_BASE_MAX_EPOCHS}"
 echo "  patience=${PATIENCE}"
 echo "  pytorch_mps_fallback=${PYTORCH_ENABLE_MPS_FALLBACK}"
 if [[ "${SMOKE}" == "1" ]]; then
@@ -154,30 +154,30 @@ os._exit(exit_code)
 PY
 }
 
-E6_CMD=(
-  run_python_module src.training.train_e6_whisper
+WHISPER_BASE_CMD=(
+  run_python_module src.training.train_whisper_base
   --batch-size "${BATCH_SIZE}"
-  --max-epochs "${E6_MAX_EPOCHS}"
+  --max-epochs "${WHISPER_BASE_MAX_EPOCHS}"
   --patience "${PATIENCE}"
   --device "${DEVICE}"
-  --learning-rate "${E6_LR}"
+  --learning-rate "${WHISPER_BASE_LR}"
   --weight-decay "${WEIGHT_DECAY}"
   --latency-samples "${LATENCY_SAMPLES}"
   --overwrite
 )
 if [[ "${SMOKE}" == "1" ]]; then
-  E6_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
+  WHISPER_BASE_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
 fi
 
 echo
-echo "==> E6: original Whisper-base frozen encoder + classifier head"
-"${E6_CMD[@]}"
+echo "==> Whisper-base: original Whisper-base frozen encoder + classifier head"
+"${WHISPER_BASE_CMD[@]}"
 
 echo
 echo "Done. Key outputs:"
-echo "  outputs/metrics/e6_whisper_base_results.json"
-echo "  outputs/models/e6_whisper_base_frozen_encoder.pt"
-echo "  outputs/figures/e6_whisper_base_confusion_matrix.png"
+echo "  outputs/metrics/whisper_base_results.json"
+echo "  outputs/models/whisper_base_frozen_encoder.pt"
+echo "  outputs/figures/whisper_base_confusion_matrix.png"
 echo "  outputs/metrics/deep_learning_comparison.csv"
 echo "  outputs/metrics/model_method_comparison.csv"
-echo "  outputs/reports/e6_whisper_base_report.md"
+echo "  outputs/reports/whisper_base_report.md"

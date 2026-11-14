@@ -23,7 +23,7 @@ from src.training.train_cnn import (
     resolve_device,
     set_seed,
 )
-from src.training.train_e7_whisper_cnn_fusion import (
+from src.training.train_whisper_cnn_fusion import (
     build_loader,
     central_error_analysis,
     combined_model_size_mb,
@@ -52,7 +52,7 @@ from src.utils.audio import TARGET_SAMPLE_RATE, TARGET_SAMPLES
 
 
 PHASE = "phase11_whisper_cnn_residual_fusion"
-EXPERIMENT_ID = "e8_whisper_cnn_residual_fusion"
+EXPERIMENT_ID = "whisper_cnn_residual_fusion"
 DEFAULT_MODEL_ID = "vinai/PhoWhisper-base"
 DEFAULT_SEED = 42
 DEFAULT_BATCH_SIZE = 14
@@ -70,7 +70,7 @@ DEFAULT_CLASSIFIER_HIDDEN_DIM = 256
 DEFAULT_CNN_TRAINABLE_LAYERS = 2
 DEFAULT_BETA_INIT = 0.1
 DEFAULT_BEST_SCORE_TYPE = "hybrid_macro_central"
-DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/e2_efficientnetb0_logmel.pt")
+DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/efficientnetb0_logmel.pt")
 DEFAULT_PHOWHISPER_HEAD_CHECKPOINT_PATH = Path(
     "outputs/models/phowhisper_pretrained_frozen_encoder.pt"
 )
@@ -268,7 +268,7 @@ def checkpoint_state(
         "model": "WhisperCnnFusionClassifier",
         "model_id": args.model_id,
         "whisper_encoder_frozen": True,
-        "local_encoder": "e2_efficientnetb0_features",
+        "local_encoder": "efficientnetb0_features",
         "local_encoder_checkpoint_path": args.cnn_checkpoint_path.as_posix(),
         "local_encoder_frozen": args.cnn_trainable_layers == 0,
         "local_encoder_trainable_layers": args.cnn_trainable_layers,
@@ -326,7 +326,7 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
         "# Phase 11 PhoWhisper + CNN Residual Fusion Report",
         "",
         "This experiment keeps the PhoWhisper encoder frozen and uses the trained "
-        "E2 EfficientNetB0-style log-Mel branch as a residual acoustic correction. "
+        "EfficientNetB0-style log-Mel branch as a residual acoustic correction. "
         "The residual-gated fusion is `z = g + beta * r(g,l) * P(l)`, where the "
         "PhoWhisper baseline head is warm-started from the frozen PhoWhisper checkpoint.",
         "",
@@ -395,7 +395,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-path",
         type=Path,
-        default=Path("outputs/models/e8_whisper_cnn_residual_fusion.pt"),
+        default=Path("outputs/models/whisper_cnn_residual_fusion.pt"),
     )
     parser.add_argument(
         "--cnn-checkpoint-path",
@@ -411,12 +411,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--metrics-path",
         type=Path,
-        default=Path("outputs/metrics/e8_whisper_cnn_residual_fusion_results.json"),
+        default=Path("outputs/metrics/whisper_cnn_residual_fusion_results.json"),
     )
     parser.add_argument(
         "--training-log-path",
         type=Path,
-        default=Path("outputs/metrics/e8_whisper_cnn_residual_fusion_training_log.csv"),
+        default=Path("outputs/metrics/whisper_cnn_residual_fusion_training_log.csv"),
     )
     parser.add_argument(
         "--report-path",
@@ -427,14 +427,14 @@ def parse_args() -> argparse.Namespace:
         "--valid-confusion-path",
         type=Path,
         default=Path(
-            "outputs/metrics/e8_whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
+            "outputs/metrics/whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
         ),
     )
     parser.add_argument(
         "--test-confusion-path",
         type=Path,
         default=Path(
-            "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv"
+            "outputs/metrics/whisper_cnn_residual_fusion_test_confusion_matrix.csv"
         ),
     )
     parser.add_argument("--device", choices=("auto", "mps", "cuda", "cpu"), default="auto")
@@ -726,9 +726,9 @@ def main() -> None:
             "global_embedding": "mean_pool_hidden_state",
             "local_input": "standardized log_mel_spectrogram",
             "local_encoder": (
-                "lightly_finetuned_e2_efficientnetb0_features"
+                "lightly_finetuned_efficientnetb0_features"
                 if args.cnn_trainable_layers > 0
-                else "frozen_e2_efficientnetb0_features"
+                else "frozen_efficientnetb0_features"
             ),
             "n_mels": DEFAULT_N_MELS,
         },
@@ -800,10 +800,10 @@ def main() -> None:
             for split in SPLITS
         },
         "comparison_targets": [
-            "e4_phowhisper",
-            "e7_whisper_cnn_fusion",
-            "e2_efficientnetb0",
-            "e6_whisper_base",
+            "phowhisper_comparison",
+            "whisper_cnn_fusion",
+            "efficientnetb0",
+            "whisper_base",
         ],
         "notes": (
             "Frozen PhoWhisper encoder plus residual-gated local EfficientNetB0 "

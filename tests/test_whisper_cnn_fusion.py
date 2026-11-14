@@ -11,7 +11,7 @@ from src.models.whisper_cnn_fusion import (
     count_parameters,
     infer_whisper_hidden_size,
 )
-from src.training.train_e7_whisper_cnn_fusion import (
+from src.training.train_whisper_cnn_fusion import (
     DEFAULT_CNN_LEARNING_RATE,
     DEFAULT_CNN_TRAINABLE_LAYERS,
     DEFAULT_FUSION_TYPE,
@@ -20,12 +20,12 @@ from src.training.train_e7_whisper_cnn_fusion import (
     checkpoint_state,
     optimizer_parameter_groups,
 )
-from src.training.train_e8_whisper_cnn_residual_fusion import (
-    DEFAULT_BATCH_SIZE as E8_DEFAULT_BATCH_SIZE,
-    DEFAULT_BEST_SCORE_TYPE as E8_DEFAULT_BEST_SCORE_TYPE,
-    DEFAULT_BETA_INIT as E8_DEFAULT_BETA_INIT,
-    DEFAULT_FUSION_TYPE as E8_DEFAULT_FUSION_TYPE,
-    checkpoint_state as e8_checkpoint_state,
+from src.training.train_whisper_cnn_residual_fusion import (
+    DEFAULT_BATCH_SIZE as RESIDUAL_DEFAULT_BATCH_SIZE,
+    DEFAULT_BEST_SCORE_TYPE as RESIDUAL_DEFAULT_BEST_SCORE_TYPE,
+    DEFAULT_BETA_INIT as RESIDUAL_DEFAULT_BETA_INIT,
+    DEFAULT_FUSION_TYPE as RESIDUAL_DEFAULT_FUSION_TYPE,
+    checkpoint_state as residual_checkpoint_state,
     load_phowhisper_head_weights,
 )
 from src.training.train_extended_deep_learning import (
@@ -288,7 +288,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         )
         args = SimpleNamespace(
             model_id=DEFAULT_MODEL_ID,
-            cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
+            cnn_checkpoint_path=Path("outputs/models/efficientnetb0_logmel.pt"),
             fusion_type="concat",
             fusion_dim=16,
             classifier_hidden_dim=256,
@@ -310,7 +310,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         self.assertTrue(saved_keys)
         self.assertFalse(any(key.startswith("whisper_encoder.") for key in saved_keys))
         self.assertFalse(any(key.startswith("local_encoder.") for key in saved_keys))
-        self.assertEqual(state["local_encoder"], "e2_efficientnetb0_features")
+        self.assertEqual(state["local_encoder"], "efficientnetb0_features")
         self.assertTrue(state["local_encoder_frozen"])
         self.assertEqual(state["local_encoder_trainable_layers"], 0)
 
@@ -331,7 +331,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         selected = model.enable_local_encoder_finetuning(trainable_layers=1)
         args = SimpleNamespace(
             model_id=DEFAULT_MODEL_ID,
-            cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
+            cnn_checkpoint_path=Path("outputs/models/efficientnetb0_logmel.pt"),
             fusion_type="gated",
             fusion_dim=16,
             classifier_hidden_dim=256,
@@ -408,13 +408,13 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
 
         self.assertEqual([group["lr"] for group in groups], [1e-4, 3e-5, 1e-5])
 
-    def test_phase11_e8_defaults(self):
-        self.assertEqual(E8_DEFAULT_FUSION_TYPE, "residual_gated")
-        self.assertEqual(E8_DEFAULT_BATCH_SIZE, 14)
-        self.assertEqual(E8_DEFAULT_BETA_INIT, 0.1)
-        self.assertEqual(E8_DEFAULT_BEST_SCORE_TYPE, "hybrid_macro_central")
+    def test_residual_fusion_defaults(self):
+        self.assertEqual(RESIDUAL_DEFAULT_FUSION_TYPE, "residual_gated")
+        self.assertEqual(RESIDUAL_DEFAULT_BATCH_SIZE, 14)
+        self.assertEqual(RESIDUAL_DEFAULT_BETA_INIT, 0.1)
+        self.assertEqual(RESIDUAL_DEFAULT_BEST_SCORE_TYPE, "hybrid_macro_central")
 
-    def test_e8_loads_phowhisper_linear_head_weights(self):
+    def test_residual_fusion_loads_phowhisper_linear_head_weights(self):
         encoder = FakeWhisperEncoder(hidden_size=16)
         model = WhisperCnnFusionClassifier(
             whisper_encoder=encoder,
@@ -449,7 +449,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         self.assertTrue(torch.equal(model.projector.weight, checkpoint["model_state_dict"]["projector.weight"]))
         self.assertTrue(torch.equal(model.classifier.bias, checkpoint["model_state_dict"]["classifier.bias"]))
 
-    def test_e8_checkpoint_preserves_beta_and_residual_config(self):
+    def test_residual_checkpoint_preserves_beta_and_config(self):
         encoder = FakeWhisperEncoder(hidden_size=16)
         local_encoder = torch.nn.Sequential(
             torch.nn.Conv2d(1, 4, kernel_size=3, padding=1),
@@ -472,7 +472,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
             model.beta.fill_(0.37)
         args = SimpleNamespace(
             model_id=DEFAULT_MODEL_ID,
-            cnn_checkpoint_path=Path("outputs/models/e2_efficientnetb0_logmel.pt"),
+            cnn_checkpoint_path=Path("outputs/models/efficientnetb0_logmel.pt"),
             fusion_type="residual_gated",
             fusion_dim=16,
             local_embedding_dim=4,
@@ -485,7 +485,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
             seed=42,
         )
 
-        state = e8_checkpoint_state(
+        state = residual_checkpoint_state(
             model,
             epoch=2,
             valid_metrics={"macro_f1": 0.5, "per_class": {"Central": {"f1": 0.4}}},
@@ -512,7 +512,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
         )
         reloaded.load_state_dict(state["model_state_dict"], strict=False)
 
-        self.assertEqual(state["experiment_id"], "e8_whisper_cnn_residual_fusion")
+        self.assertEqual(state["experiment_id"], "whisper_cnn_residual_fusion")
         self.assertEqual(state["fusion_type"], "residual_gated")
         self.assertAlmostEqual(state["beta_init"], 0.1)
         self.assertAlmostEqual(state["beta_learned"], 0.37, places=6)
@@ -523,7 +523,7 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
     def test_phase10_comparison_row_is_collected_from_metrics_json(self):
         payload = {
             "phase": "phase10_whisper_cnn_fusion",
-            "experiment_id": "e7_whisper_cnn_fusion",
+            "experiment_id": "whisper_cnn_fusion",
             "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
             "status": "trained",
             "model_size_mb": 100.0,
@@ -536,13 +536,13 @@ class WhisperCnnFusionTrainingTests(unittest.TestCase):
             "notes": "ok",
         }
         with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "e7.json"
+            path = Path(temp_dir) / "whisper_cnn_fusion.json"
             path.write_text(__import__("json").dumps(payload), encoding="utf-8")
             rows = []
 
             append_phase10_comparison_row(rows, path)
 
-        self.assertEqual(rows[0]["method_id"], "e7_whisper_cnn_fusion")
+        self.assertEqual(rows[0]["method_id"], "whisper_cnn_fusion")
         self.assertEqual(rows[0]["group"], "phase10_whisper_cnn_fusion")
         self.assertEqual(rows[0]["test_macro_f1"], 0.55)
 

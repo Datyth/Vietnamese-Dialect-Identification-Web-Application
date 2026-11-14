@@ -1,6 +1,6 @@
 {
   "phase": "phase11_whisper_cnn_residual_fusion",
-  "experiment_id": "e8_whisper_cnn_residual_fusion",
+  "experiment_id": "whisper_cnn_residual_fusion",
   "model_name": "Residual-gated PhoWhisper-base encoder + log-Mel CNN fusion",
   "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
   "pretrained": "vinai/PhoWhisper-base",
@@ -17,8 +17,8 @@
   "seed": 42,
   "model_id": "vinai/PhoWhisper-base",
   "cache_dir": "outputs/models/hf_cache",
-  "cnn_checkpoint_path": "outputs/models/e2_efficientnetb0_logmel.pt",
-  "cnn_checkpoint_experiment_id": "e2_efficientnetb0",
+  "cnn_checkpoint_path": "outputs/models/efficientnetb0_logmel.pt",
+  "cnn_checkpoint_experiment_id": "efficientnetb0",
   "phowhisper_head_checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
   "split_counts_full_metadata": {
     "train": {
@@ -61,7 +61,7 @@
     "whisper_input": "PhoWhisper/Whisper input_features",
     "global_embedding": "mean_pool_hidden_state",
     "local_input": "standardized log_mel_spectrogram",
-    "local_encoder": "lightly_finetuned_e2_efficientnetb0_features",
+    "local_encoder": "lightly_finetuned_efficientnetb0_features",
     "n_mels": 64
   },
   "fusion": {
@@ -127,7 +127,7 @@
     ],
     "weight_decay": 0.0001,
     "training_time_minutes": 258.2304039458337,
-    "training_log_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_training_log.csv"
+    "training_log_path": "outputs/metrics/whisper_cnn_residual_fusion_training_log.csv"
   },
   "parameter_counts": {
     "total": 21435844,
@@ -140,7 +140,7 @@
   "best_epoch": 5,
   "best_valid_score": 0.8177392610323486,
   "best_valid_macro_f1": 0.8395485891622344,
-  "checkpoint_path": "outputs/models/e8_whisper_cnn_residual_fusion.pt",
+  "checkpoint_path": "outputs/models/whisper_cnn_residual_fusion.pt",
   "model_size_mb": 557.802773475647,
   "classifier_checkpoint_size_mb": 3.278186798095703,
   "encoder_cache_size_mb": 554.0093746185303,
@@ -209,7 +209,7 @@
         "Central": 0.7668508287292818,
         "Southern": 0.8511066398390342
       },
-      "confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
+      "confusion_matrix_path": "outputs/metrics/whisper_cnn_residual_fusion_valid_confusion_matrix.csv"
     },
     "test": {
       "loss": 0.4919764342805976,
@@ -237,14 +237,14 @@
         "Central": 0.7222857142857143,
         "Southern": 0.8180039138943248
       },
-      "confusion_matrix_path": "outputs/metrics/e8_whisper_cnn_residual_fusion_test_confusion_matrix.csv"
+      "confusion_matrix_path": "outputs/metrics/whisper_cnn_residual_fusion_test_confusion_matrix.csv"
     }
   },
   "comparison_targets": [
-    "e4_phowhisper",
-    "e7_whisper_cnn_fusion",
-    "e2_efficientnetb0",
-    "e6_whisper_base"
+    "phowhisper_comparison",
+    "whisper_cnn_fusion",
+    "efficientnetb0",
+    "whisper_base"
   ],
   "notes": "Frozen PhoWhisper encoder plus residual-gated local EfficientNetB0 log-Mel correction. The PhoWhisper projector/classifier head is warm-started from the frozen PhoWhisper baseline checkpoint; no decoder, no ASR transcript, and no personal-background inference."
 }

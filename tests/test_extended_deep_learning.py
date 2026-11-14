@@ -20,7 +20,7 @@ from src.training.train_extended_deep_learning import (
 
 
 class Phase9ModelTests(unittest.TestCase):
-    def test_e1_mobilenetv3_forward_returns_three_class_logits(self):
+    def test_mobilenetv3_forward_returns_three_class_logits(self):
         model = MobileNetV3SmallClassifier(num_classes=3)
         inputs = torch.randn(2, 1, 64, 99)
 
@@ -28,7 +28,7 @@ class Phase9ModelTests(unittest.TestCase):
 
         self.assertEqual(tuple(logits.shape), (2, 3))
 
-    def test_e2_efficientnet_forward_returns_three_class_logits(self):
+    def test_efficientnetb0_forward_returns_three_class_logits(self):
         model = EfficientNetB0Classifier(num_classes=3)
         inputs = torch.randn(2, 1, 64, 99)
 
@@ -36,7 +36,7 @@ class Phase9ModelTests(unittest.TestCase):
 
         self.assertEqual(tuple(logits.shape), (2, 3))
 
-    def test_e3_wav2vec2_head_returns_three_class_logits(self):
+    def test_wav2vec2_head_returns_three_class_logits(self):
         model = Wav2Vec2EmbeddingClassifier(embedding_dim=768, num_classes=3)
         inputs = torch.randn(2, 768)
 
@@ -44,7 +44,7 @@ class Phase9ModelTests(unittest.TestCase):
 
         self.assertEqual(tuple(logits.shape), (2, 3))
 
-    def test_e5_chunkformer_forward_returns_three_class_logits(self):
+    def test_chunkformer_forward_returns_three_class_logits(self):
         model = VipvlChunkFormerTinyClassifier(num_classes=3)
         inputs = torch.randn(2, 16000)
 
@@ -69,29 +69,25 @@ class Phase9MetadataTests(unittest.TestCase):
 
 
 class Phase9ComparisonTests(unittest.TestCase):
-    def test_e6_alias_resolves_to_whisper_base_experiment(self):
-        self.assertEqual(canonical_experiment_id("e6"), "e6_whisper_base")
-        self.assertEqual(
-            canonical_experiment_id("e6_whisper"),
-            "e6_whisper_base",
-        )
+    def test_whisper_base_name_resolves(self):
+        self.assertEqual(canonical_experiment_id("whisper_base"), "whisper_base")
 
     def test_comparison_csv_handles_trained_reused_and_skipped_rows(self):
         rows = [
             {
-                "experiment_id": "e1_mobilenetv3",
+                "experiment_id": "mobilenetv3",
                 "model_name": "mobile",
                 "status": "trained",
                 "macro_f1": 0.2,
             },
             {
-                "experiment_id": "e4_phowhisper",
+                "experiment_id": "phowhisper_comparison",
                 "model_name": "phowhisper",
                 "status": "reused",
                 "macro_f1": 0.7,
             },
             {
-                "experiment_id": "e5_vipvl_chunkformer",
+                "experiment_id": "vipvl_chunkformer",
                 "model_name": "chunkformer",
                 "status": "skipped",
                 "macro_f1": None,
@@ -109,7 +105,7 @@ class Phase9ComparisonTests(unittest.TestCase):
 
     def test_method_comparison_csv_writes_expected_fields(self):
         row = {
-            "method_id": "e3_wav2vec2",
+            "method_id": "wav2vec2",
             "group": "phase9",
             "input_type": "waveform_16khz",
             "status": "trained",
@@ -120,7 +116,7 @@ class Phase9ComparisonTests(unittest.TestCase):
             "model_size_mb": 378.0,
             "latency_ms_per_sample": 120.0,
             "device": "cpu",
-            "metrics_path": "outputs/metrics/e3_wav2vec2_results.json",
+            "metrics_path": "outputs/metrics/wav2vec2_results.json",
             "notes": "ok",
         }
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -131,7 +127,7 @@ class Phase9ComparisonTests(unittest.TestCase):
             with path.open(encoding="utf-8", newline="") as input_file:
                 loaded = list(csv.DictReader(input_file))
         self.assertEqual(list(loaded[0]), METHOD_COMPARISON_FIELDS)
-        self.assertEqual(loaded[0]["method_id"], "e3_wav2vec2")
+        self.assertEqual(loaded[0]["method_id"], "wav2vec2")
 
 
 if __name__ == "__main__":

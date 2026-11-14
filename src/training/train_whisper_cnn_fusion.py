@@ -40,7 +40,7 @@ from src.utils.audio import TARGET_SAMPLE_RATE, TARGET_SAMPLES, load_audio
 
 
 PHASE = "phase10_whisper_cnn_fusion"
-EXPERIMENT_ID = "e7_whisper_cnn_fusion"
+EXPERIMENT_ID = "whisper_cnn_fusion"
 DEFAULT_MODEL_ID = "vinai/PhoWhisper-base"
 DEFAULT_SEED = 42
 DEFAULT_BATCH_SIZE = 4
@@ -55,7 +55,7 @@ DEFAULT_FUSION_DIM = 512
 DEFAULT_CLASSIFIER_HIDDEN_DIM = 256
 DEFAULT_CNN_TRAINABLE_LAYERS = 2
 DEFAULT_CNN_LEARNING_RATE = 1e-5
-DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/e2_efficientnetb0_logmel.pt")
+DEFAULT_CNN_CHECKPOINT_PATH = Path("outputs/models/efficientnetb0_logmel.pt")
 
 
 class WhisperCnnRowsDataset:
@@ -172,8 +172,8 @@ def load_efficientnet_encoder(args: argparse.Namespace, device: Any) -> tuple[An
     path = args.cnn_checkpoint_path
     if not path.exists():
         raise FileNotFoundError(
-            f"EfficientNetB0 checkpoint not found: {path}. Run E2 first with "
-            "scripts/train_e3_e5_mps.sh or src.training.train_e2_efficientnet."
+            f"EfficientNetB0 checkpoint not found: {path}. Run "
+            "src.training.train_efficientnetb0 first."
         )
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     if not isinstance(checkpoint, dict) or "model_state_dict" not in checkpoint:
@@ -183,7 +183,7 @@ def load_efficientnet_encoder(args: argparse.Namespace, device: Any) -> tuple[An
 
     labels = tuple(checkpoint.get("label_order", ()))
     contracts = {
-        "experiment_id": (checkpoint.get("experiment_id"), "e2_efficientnetb0"),
+        "experiment_id": (checkpoint.get("experiment_id"), "efficientnetb0"),
         "feature": (checkpoint.get("feature"), "log_mel_spectrogram"),
         "sample_rate": (checkpoint.get("sample_rate"), TARGET_SAMPLE_RATE),
         "target_samples": (checkpoint.get("target_samples"), TARGET_SAMPLES),
@@ -378,7 +378,7 @@ def checkpoint_state(
         "model": "WhisperCnnFusionClassifier",
         "model_id": args.model_id,
         "whisper_encoder_frozen": True,
-        "local_encoder": "e2_efficientnetb0_features",
+        "local_encoder": "efficientnetb0_features",
         "local_encoder_checkpoint_path": args.cnn_checkpoint_path.as_posix(),
         "local_encoder_frozen": args.cnn_trainable_layers == 0,
         "local_encoder_trainable_layers": args.cnn_trainable_layers,
@@ -429,14 +429,14 @@ def write_report(path: Path, results: dict[str, Any]) -> None:
     if local_trainable:
         branch_description = (
             "This experiment combines a frozen PhoWhisper encoder branch with a "
-            "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch. "
+            "lightly fine-tuned EfficientNetB0-style log-Mel branch. "
             "Only the selected CNN tail blocks plus the projection, fusion, and "
             "classification head are trained."
         )
     else:
         branch_description = (
             "This experiment combines a frozen PhoWhisper encoder branch with a "
-            "frozen trained E2 EfficientNetB0-style log-Mel branch. Only the "
+            "frozen EfficientNetB0-style log-Mel branch. Only the "
             "projection, fusion, and classification head are trained."
         )
     lines = [
@@ -583,23 +583,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-path",
         type=Path,
-        default=Path("outputs/models/e7_whisper_cnn_fusion.pt"),
+        default=Path("outputs/models/whisper_cnn_fusion.pt"),
     )
     parser.add_argument(
         "--cnn-checkpoint-path",
         type=Path,
         default=DEFAULT_CNN_CHECKPOINT_PATH,
-        help="Trained E2 EfficientNetB0-style checkpoint for the frozen local branch.",
+        help="Trained EfficientNetB0-style checkpoint for the local branch.",
     )
     parser.add_argument(
         "--metrics-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_results.json"),
+        default=Path("outputs/metrics/whisper_cnn_fusion_results.json"),
     )
     parser.add_argument(
         "--training-log-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_training_log.csv"),
+        default=Path("outputs/metrics/whisper_cnn_fusion_training_log.csv"),
     )
     parser.add_argument(
         "--report-path",
@@ -609,12 +609,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--valid-confusion-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv"),
+        default=Path("outputs/metrics/whisper_cnn_fusion_valid_confusion_matrix.csv"),
     )
     parser.add_argument(
         "--test-confusion-path",
         type=Path,
-        default=Path("outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv"),
+        default=Path("outputs/metrics/whisper_cnn_fusion_test_confusion_matrix.csv"),
     )
     parser.add_argument("--device", choices=("auto", "mps", "cuda", "cpu"), default="auto")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -881,9 +881,9 @@ def main() -> None:
             "whisper_input": "PhoWhisper/Whisper input_features",
             "local_input": "standardized log_mel_spectrogram",
             "local_encoder": (
-                "lightly_finetuned_e2_efficientnetb0_features"
+                "lightly_finetuned_efficientnetb0_features"
                 if args.cnn_trainable_layers > 0
-                else "frozen_e2_efficientnetb0_features"
+                else "frozen_efficientnetb0_features"
             ),
             "n_mels": DEFAULT_N_MELS,
         },
@@ -937,19 +937,19 @@ def main() -> None:
             for split in SPLITS
         },
         "comparison_targets": [
-            "e1_mobilenetv3",
-            "e2_efficientnetb0",
-            "e4_phowhisper",
-            "e6_whisper_base",
-            "e3_wav2vec2",
+            "mobilenetv3",
+            "efficientnetb0",
+            "phowhisper_comparison",
+            "whisper_base",
+            "wav2vec2",
         ],
         "notes": (
             "Frozen PhoWhisper encoder plus "
             + (
-                "lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch; "
+                "lightly fine-tuned EfficientNetB0-style log-Mel branch; "
                 f"trainable CNN child modules: {', '.join(local_trainable_child_names)}. "
                 if args.cnn_trainable_layers > 0
-                else "frozen trained E2 EfficientNetB0-style log-Mel branch; "
+                else "frozen EfficientNetB0-style log-Mel branch; "
             )
             + "Projection, fusion, and classification head are trained. "
             "No decoder, no ASR transcript, and no personal-background inference."

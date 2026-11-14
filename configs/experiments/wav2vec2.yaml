@@ -1,4 +1,4 @@
-experiment_name: e3_wav2vec2_vietnamese
+experiment_name: wav2vec2_vietnamese
 phase: phase9_extended_deep_learning_experiments
 mode: full
 model_name: nguyenvulebinh/wav2vec2-base-vietnamese-250h

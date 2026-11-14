@@ -1,6 +1,6 @@
 {
   "phase": "phase9_extended_deep_learning_experiments",
-  "experiment_id": "e2_efficientnetb0",
+  "experiment_id": "efficientnetb0",
   "model_name": "EfficientNet-B0-style log-Mel classifier",
   "input_type": "log_mel_spectrogram",
   "pretrained": "none",
@@ -69,12 +69,12 @@
     "learning_rate": 0.0001,
     "weight_decay": 0.0001,
     "training_time_minutes": 31.668507936802538,
-    "training_log_path": "outputs/metrics/e2_efficientnetb0_training_log.csv"
+    "training_log_path": "outputs/metrics/efficientnetb0_training_log.csv"
   },
   "best_epoch": 12,
   "best_valid_macro_f1": 0.712714423356226,
-  "checkpoint_path": "outputs/models/e2_efficientnetb0_logmel.pt",
-  "confusion_matrix_path": "outputs/figures/e2_efficientnetb0_confusion_matrix.png",
+  "checkpoint_path": "outputs/models/efficientnetb0_logmel.pt",
+  "confusion_matrix_path": "outputs/figures/efficientnetb0_confusion_matrix.png",
   "model_size_mb": 0.5152120590209961,
   "latency_estimate": {
     "sample_count": 5,
@@ -161,7 +161,7 @@
         "Central": 0.6068796068796068,
         "Southern": 0.7344199424736337
       },
-      "confusion_matrix_path": "outputs/figures/e2_efficientnetb0_confusion_matrix.png"
+      "confusion_matrix_path": "outputs/figures/efficientnetb0_confusion_matrix.png"
     }
   },
   "notes": "PyTorch-only EfficientNet-inspired scaffold; ImageNet weights deferred."

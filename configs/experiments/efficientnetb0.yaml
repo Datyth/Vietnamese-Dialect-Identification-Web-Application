@@ -1,4 +1,4 @@
-experiment_name: e2_efficientnetb0_logmel
+experiment_name: efficientnetb0_logmel
 phase: phase9_extended_deep_learning_experiments
 mode: setup
 feature: log_mel_spectrogram

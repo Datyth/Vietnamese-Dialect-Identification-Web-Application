@@ -1,6 +1,6 @@
 {
   "phase": "phase9_extended_deep_learning_experiments",
-  "experiment_id": "e4_phowhisper",
+  "experiment_id": "phowhisper_comparison",
   "model_name": "PhoWhisper-base encoder + classifier",
   "input_type": "phowhisper_input_features",
   "pretrained": "vinai/PhoWhisper-base",
@@ -38,7 +38,7 @@
   },
   "checkpoint_path": "outputs/models/phowhisper_pretrained_frozen_encoder.pt",
   "source_metrics_path": "outputs/metrics/phowhisper_pretrained_results.json",
-  "confusion_matrix_path": "outputs/figures/e4_phowhisper_confusion_matrix.png",
+  "confusion_matrix_path": "outputs/figures/phowhisper_comparison_confusion_matrix.png",
   "model_size_mb": 79.08485794067383,
   "latency_estimate": {
     "sample_count": 5,

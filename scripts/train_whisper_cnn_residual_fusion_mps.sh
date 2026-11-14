@@ -4,18 +4,21 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite [--smoke] [--concat] [--allow-download]
+Usage: scripts/train_whisper_cnn_residual_fusion_mps.sh --overwrite [--smoke] [--gated|--concat] [--allow-download]
 
-Train Phase 10 E7 outside the Codex sandbox with Apple MPS:
-  E7: frozen PhoWhisper-base encoder + lightly fine-tuned trained E2
-      EfficientNetB0 branch + trainable projection/fusion/classification head.
+Train Phase 11 Residual fusion outside the Codex sandbox with Apple MPS:
+  Residual fusion: frozen PhoWhisper-base encoder + residual-gated EfficientNetB0 local
+      correction + PhoWhisper baseline projector/classifier warm-start.
 
 Run from a normal Terminal window so PyTorch can see the Apple Metal device.
 
 Options:
-  --overwrite      Regenerate existing E7 checkpoint, metrics, report, and figures.
+  --overwrite      Regenerate existing Residual fusion checkpoint, metrics, report, and figures.
   --smoke          Use a tiny balanced subset and one epoch for a quick check.
-  --concat         Use concat fusion instead of default gated fusion.
+  --gated          Use legacy gated fusion ablation instead of residual_gated.
+  --concat         Use concat fusion ablation instead of residual_gated.
+  --skip-head-warm-start
+                   Do not load the PhoWhisper baseline projector/classifier.
   --allow-download Allow Hugging Face downloads for vinai/PhoWhisper-base.
   -h, --help       Show this help message.
 
@@ -23,31 +26,35 @@ Environment overrides:
   PYTHON_BIN       default: .venv/bin/python
   DEVICE           default: mps
   SEED             default: 42
-  BATCH_SIZE       default: 16
-  E7_MAX_EPOCHS    default: 20
+  BATCH_SIZE       default: 14
+  RESIDUAL_FUSION_MAX_EPOCHS    default: 20
   PATIENCE         default: 10
-  E7_LR            default: 1e-4
+  FUSION_LR        default: 1e-4
+  HEAD_LR          default: 3e-5
   CNN_LR           default: 1e-5
   CNN_TRAINABLE_LAYERS default: 2
   WEIGHT_DECAY     default: 1e-4
   DROPOUT          default: 0.0
+  BETA_INIT        default: 0.1
   LOCAL_EMBED_DIM  default: 128
   FUSION_DIM       default: 512
   CLASSIFIER_HIDDEN_DIM default: 256
-  FUSION_TYPE      default: gated
+  FUSION_TYPE      default: residual_gated
+  BEST_SCORE_TYPE  default: hybrid_macro_central
   LATENCY_SAMPLES  default: 5
   SMOKE_LIMIT_PER_SPLIT default: 6
   SMOKE_EPOCHS     default: 1
   MODEL_ID         default: vinai/PhoWhisper-base
   CACHE_DIR        default: outputs/models/hf_cache
-  CNN_CHECKPOINT   default: outputs/models/e2_efficientnetb0_logmel.pt
+  CNN_CHECKPOINT   default: outputs/models/efficientnetb0_logmel.pt
+  PHOWHISPER_HEAD_CHECKPOINT default: outputs/models/phowhisper_pretrained_frozen_encoder.pt
 EOF
 }
 
 OVERWRITE=0
 SMOKE=0
-CONCAT=0
 ALLOW_DOWNLOAD=0
+SKIP_HEAD_WARM_START=0
 
 while (($# > 0)); do
   case "$1" in
@@ -59,8 +66,16 @@ while (($# > 0)); do
       SMOKE=1
       shift
       ;;
+    --gated)
+      FUSION_TYPE="gated"
+      shift
+      ;;
     --concat)
-      CONCAT=1
+      FUSION_TYPE="concat"
+      shift
+      ;;
+    --skip-head-warm-start)
+      SKIP_HEAD_WARM_START=1
       shift
       ;;
     --allow-download)
@@ -80,8 +95,8 @@ while (($# > 0)); do
 done
 
 if [[ "${OVERWRITE}" != "1" ]]; then
-  echo "Refusing to overwrite existing E7 artifacts without --overwrite." >&2
-  echo "Run: scripts/train_e7_whisper_cnn_fusion_mps.sh --overwrite" >&2
+  echo "Refusing to overwrite existing Residual fusion artifacts without --overwrite." >&2
+  echo "Run: scripts/train_whisper_cnn_residual_fusion_mps.sh --overwrite" >&2
   exit 2
 fi
 
@@ -90,22 +105,26 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PYTHON_BIN="${PYTHON_BIN:-.venv/bin/python}"
 DEVICE="${DEVICE:-mps}"
 SEED="${SEED:-42}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
-E7_MAX_EPOCHS="${E7_MAX_EPOCHS:-20}"
+BATCH_SIZE="${BATCH_SIZE:-14}"
+RESIDUAL_FUSION_MAX_EPOCHS="${RESIDUAL_FUSION_MAX_EPOCHS:-20}"
 PATIENCE="${PATIENCE:-10}"
-E7_LR="${E7_LR:-1e-4}"
+FUSION_LR="${FUSION_LR:-1e-4}"
+HEAD_LR="${HEAD_LR:-3e-5}"
 CNN_LR="${CNN_LR:-1e-5}"
 CNN_TRAINABLE_LAYERS="${CNN_TRAINABLE_LAYERS:-2}"
 WEIGHT_DECAY="${WEIGHT_DECAY:-1e-4}"
-DROPOUT="${DROPOUT:-0.25}"
+DROPOUT="${DROPOUT:-0.0}"
+BETA_INIT="${BETA_INIT:-0.1}"
 LOCAL_EMBED_DIM="${LOCAL_EMBED_DIM:-128}"
 FUSION_DIM="${FUSION_DIM:-512}"
 CLASSIFIER_HIDDEN_DIM="${CLASSIFIER_HIDDEN_DIM:-256}"
 LATENCY_SAMPLES="${LATENCY_SAMPLES:-5}"
 MODEL_ID="${MODEL_ID:-vinai/PhoWhisper-base}"
 CACHE_DIR="${CACHE_DIR:-outputs/models/hf_cache}"
-CNN_CHECKPOINT="${CNN_CHECKPOINT:-outputs/models/e2_efficientnetb0_logmel.pt}"
-FUSION_TYPE="${FUSION_TYPE:-gated}"
+CNN_CHECKPOINT="${CNN_CHECKPOINT:-outputs/models/efficientnetb0_logmel.pt}"
+PHOWHISPER_HEAD_CHECKPOINT="${PHOWHISPER_HEAD_CHECKPOINT:-outputs/models/phowhisper_pretrained_frozen_encoder.pt}"
+FUSION_TYPE="${FUSION_TYPE:-residual_gated}"
+BEST_SCORE_TYPE="${BEST_SCORE_TYPE:-hybrid_macro_central}"
 
 cd "${ROOT_DIR}"
 
@@ -113,28 +132,29 @@ if [[ ! -x "${PYTHON_BIN}" ]]; then
   echo "Python executable not found or not executable: ${PYTHON_BIN}" >&2
   exit 1
 fi
-
 if [[ ! -f data/processed/preprocessed_metadata.csv ]]; then
   echo "Missing data/processed/preprocessed_metadata.csv." >&2
   echo "Run scripts/data.sh first." >&2
   exit 1
 fi
 if [[ ! -f "${CNN_CHECKPOINT}" ]]; then
-  echo "Missing trained E2 EfficientNetB0 checkpoint: ${CNN_CHECKPOINT}" >&2
-  echo "Run E2 first, then rerun E7." >&2
+  echo "Missing trained EfficientNet-B0 checkpoint: ${CNN_CHECKPOINT}" >&2
+  echo "Run EfficientNet-B0 first, then rerun Residual fusion." >&2
+  exit 1
+fi
+if [[ "${FUSION_TYPE}" == "residual_gated" && "${SKIP_HEAD_WARM_START}" != "1" && ! -f "${PHOWHISPER_HEAD_CHECKPOINT}" ]]; then
+  echo "Missing PhoWhisper head checkpoint: ${PHOWHISPER_HEAD_CHECKPOINT}" >&2
+  echo "Run Phase 6 first, set PHOWHISPER_HEAD_CHECKPOINT, or pass --skip-head-warm-start." >&2
   exit 1
 fi
 if [[ "${SMOKE}" == "1" ]]; then
-  E7_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
-fi
-if [[ "${CONCAT}" == "1" ]]; then
-  FUSION_TYPE="concat"
+  RESIDUAL_FUSION_MAX_EPOCHS="${SMOKE_EPOCHS:-1}"
 fi
 case "${FUSION_TYPE}" in
-  concat|gated)
+  concat|gated|residual_gated)
     ;;
   *)
-    echo "Invalid FUSION_TYPE=${FUSION_TYPE}; expected concat or gated." >&2
+    echo "Invalid FUSION_TYPE=${FUSION_TYPE}; expected concat, gated, or residual_gated." >&2
     exit 2
     ;;
 esac
@@ -168,21 +188,26 @@ echo "Run settings:"
 echo "  device=${DEVICE}"
 echo "  seed=${SEED}"
 echo "  batch_size=${BATCH_SIZE}"
-echo "  e7_max_epochs=${E7_MAX_EPOCHS}"
+echo "  residual_fusion_max_epochs=${RESIDUAL_FUSION_MAX_EPOCHS}"
 echo "  patience=${PATIENCE}"
-echo "  learning_rate=${E7_LR}"
+echo "  fusion_learning_rate=${FUSION_LR}"
+echo "  head_learning_rate=${HEAD_LR}"
 echo "  cnn_learning_rate=${CNN_LR}"
 echo "  cnn_trainable_layers=${CNN_TRAINABLE_LAYERS}"
 echo "  weight_decay=${WEIGHT_DECAY}"
 echo "  dropout=${DROPOUT}"
+echo "  beta_init=${BETA_INIT}"
 echo "  local_embed_dim=${LOCAL_EMBED_DIM}"
 echo "  fusion_dim=${FUSION_DIM}"
 echo "  classifier_hidden_dim=${CLASSIFIER_HIDDEN_DIM}"
 echo "  fusion_type=${FUSION_TYPE}"
+echo "  best_score_type=${BEST_SCORE_TYPE}"
 echo "  model_id=${MODEL_ID}"
 echo "  cache_dir=${CACHE_DIR}"
 echo "  latency_samples=${LATENCY_SAMPLES}"
 echo "  cnn_checkpoint=${CNN_CHECKPOINT}"
+echo "  phowhisper_head_checkpoint=${PHOWHISPER_HEAD_CHECKPOINT}"
+echo "  skip_head_warm_start=${SKIP_HEAD_WARM_START}"
 echo "  pytorch_mps_fallback=${PYTORCH_ENABLE_MPS_FALLBACK}"
 if [[ "${SMOKE}" == "1" ]]; then
   echo "  smoke_limit_per_split=${SMOKE_LIMIT_PER_SPLIT:-6}"
@@ -220,41 +245,49 @@ os._exit(exit_code)
 PY
 }
 
-E7_CMD=(
-  run_python_module src.training.train_e7_whisper_cnn_fusion
+RESIDUAL_FUSION_CMD=(
+  run_python_module src.training.train_whisper_cnn_residual_fusion
   --batch-size "${BATCH_SIZE}"
-  --max-epochs "${E7_MAX_EPOCHS}"
+  --max-epochs "${RESIDUAL_FUSION_MAX_EPOCHS}"
   --patience "${PATIENCE}"
   --device "${DEVICE}"
   --seed "${SEED}"
   --model-id "${MODEL_ID}"
   --cache-dir "${CACHE_DIR}"
-  --learning-rate "${E7_LR}"
+  --learning-rate "${FUSION_LR}"
+  --head-learning-rate "${HEAD_LR}"
   --cnn-learning-rate "${CNN_LR}"
   --cnn-trainable-layers "${CNN_TRAINABLE_LAYERS}"
   --weight-decay "${WEIGHT_DECAY}"
   --dropout "${DROPOUT}"
+  --beta-init "${BETA_INIT}"
   --local-embedding-dim "${LOCAL_EMBED_DIM}"
   --fusion-dim "${FUSION_DIM}"
   --classifier-hidden-dim "${CLASSIFIER_HIDDEN_DIM}"
   --cnn-checkpoint-path "${CNN_CHECKPOINT}"
+  --phowhisper-head-checkpoint-path "${PHOWHISPER_HEAD_CHECKPOINT}"
   --fusion-type "${FUSION_TYPE}"
+  --best-score-type "${BEST_SCORE_TYPE}"
   --latency-samples "${LATENCY_SAMPLES}"
   --overwrite
 )
 if [[ "${SMOKE}" == "1" ]]; then
-  E7_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
+  RESIDUAL_FUSION_CMD+=(--limit-per-split "${SMOKE_LIMIT_PER_SPLIT:-6}")
 fi
 if [[ "${ALLOW_DOWNLOAD}" == "1" ]]; then
-  E7_CMD+=(--allow-download)
+  RESIDUAL_FUSION_CMD+=(--allow-download)
 fi
+if [[ "${SKIP_HEAD_WARM_START}" == "1" ]]; then
+  RESIDUAL_FUSION_CMD+=(--skip-phowhisper-head-warm-start)
+fi
+
 echo
-echo "==> E7: frozen PhoWhisper-base + lightly fine-tuned E2 EfficientNetB0 fusion head"
-"${E7_CMD[@]}"
+echo "==> Residual fusion: frozen PhoWhisper-base + residual-gated EfficientNet-B0 correction"
+"${RESIDUAL_FUSION_CMD[@]}"
 
 echo
 echo "Done. Key outputs:"
-echo "  outputs/metrics/e7_whisper_cnn_fusion_results.json"
-echo "  outputs/models/e7_whisper_cnn_fusion.pt"
-echo "  outputs/reports/phase10_whisper_cnn_fusion_report.md"
+echo "  outputs/metrics/whisper_cnn_residual_fusion_results.json"
+echo "  outputs/models/whisper_cnn_residual_fusion.pt"
+echo "  outputs/reports/phase11_whisper_cnn_residual_fusion_report.md"
 echo "  outputs/metrics/model_method_comparison.csv"

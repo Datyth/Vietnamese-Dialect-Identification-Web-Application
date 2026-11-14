@@ -1,4 +1,4 @@
-experiment_name: e6_whisper_base_original
+experiment_name: whisper_base_original
 phase: phase9_extended_deep_learning_experiments
 mode: full
 model_name: openai/whisper-base

@@ -1,6 +1,6 @@
 {
   "phase": "phase10_whisper_cnn_fusion",
-  "experiment_id": "e7_whisper_cnn_fusion",
+  "experiment_id": "whisper_cnn_fusion",
   "model_name": "Hybrid frozen PhoWhisper-base encoder + log-Mel CNN fusion",
   "input_type": "waveform_16khz_to_whisper_features_and_log_mel",
   "pretrained": "vinai/PhoWhisper-base",
@@ -17,8 +17,8 @@
   "seed": 42,
   "model_id": "vinai/PhoWhisper-base",
   "cache_dir": "outputs/models/hf_cache",
-  "cnn_checkpoint_path": "outputs/models/e2_efficientnetb0_logmel.pt",
-  "cnn_checkpoint_experiment_id": "e2_efficientnetb0",
+  "cnn_checkpoint_path": "outputs/models/efficientnetb0_logmel.pt",
+  "cnn_checkpoint_experiment_id": "efficientnetb0",
   "split_counts_full_metadata": {
     "train": {
       "Northern": 3708,
@@ -59,7 +59,7 @@
     "duration_sec": 16.0,
     "whisper_input": "PhoWhisper/Whisper input_features",
     "local_input": "standardized log_mel_spectrogram",
-    "local_encoder": "lightly_finetuned_e2_efficientnetb0_features",
+    "local_encoder": "lightly_finetuned_efficientnetb0_features",
     "n_mels": 64
   },
   "fusion": {
@@ -85,7 +85,7 @@
     ],
     "weight_decay": 0.0001,
     "training_time_minutes": 296.2512975534676,
-    "training_log_path": "outputs/metrics/e7_whisper_cnn_fusion_training_log.csv"
+    "training_log_path": "outputs/metrics/whisper_cnn_fusion_training_log.csv"
   },
   "parameter_counts": {
     "total": 21437891,
@@ -97,7 +97,7 @@
   },
   "best_epoch": 7,
   "best_valid_macro_f1": 0.8194010608596095,
-  "checkpoint_path": "outputs/models/e7_whisper_cnn_fusion.pt",
+  "checkpoint_path": "outputs/models/whisper_cnn_fusion.pt",
   "model_size_mb": 557.8096008300781,
   "classifier_checkpoint_size_mb": 3.2850141525268555,
   "encoder_cache_size_mb": 554.0093746185303,
@@ -166,7 +166,7 @@
         "Central": 0.7276887871853547,
         "Southern": 0.838
       },
-      "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_valid_confusion_matrix.csv"
+      "confusion_matrix_path": "outputs/metrics/whisper_cnn_fusion_valid_confusion_matrix.csv"
     },
     "test": {
       "loss": 0.5145030184323159,
@@ -194,15 +194,15 @@
         "Central": 0.6848989298454221,
         "Southern": 0.8172043010752689
       },
-      "confusion_matrix_path": "outputs/metrics/e7_whisper_cnn_fusion_test_confusion_matrix.csv"
+      "confusion_matrix_path": "outputs/metrics/whisper_cnn_fusion_test_confusion_matrix.csv"
     }
   },
   "comparison_targets": [
-    "e1_mobilenetv3",
-    "e2_efficientnetb0",
-    "e4_phowhisper",
-    "e6_whisper_base",
-    "e3_wav2vec2"
+    "mobilenetv3",
+    "efficientnetb0",
+    "phowhisper_comparison",
+    "whisper_base",
+    "wav2vec2"
   ],
   "notes": "Frozen PhoWhisper encoder plus lightly fine-tuned trained E2 EfficientNetB0-style log-Mel branch; trainable CNN child modules: 5, 6. Projection, fusion, and classification head are trained. No decoder, no ASR transcript, and no personal-background inference."
 }

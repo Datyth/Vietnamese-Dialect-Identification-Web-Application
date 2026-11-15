@@ -1,6 +1,6 @@
 # Vietnamese Dialect Identification
 
-A Python project for classifying Vietnamese speech into three broad regional labels: **Northern**, **Central**, and **Southern**. It provides a reproducible audio pipeline, several classification approaches, evaluation tools, and a local web app where users can upload a recording and view a prediction.
+A project for classifying Vietnamese speech into three broad regional labels: **Northern**, **Central**, and **Southern**. It provides a reproducible audio pipeline, several classification approaches, evaluation tools, and a local web app where users can upload a recording and view a prediction.
 
 ## What the project includes
 
